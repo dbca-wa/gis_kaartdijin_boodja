@@ -8,21 +8,19 @@ import tempfile
 import urllib.parse
 
 # Third-Party
+from django import conf
 import shareplum
 
-# Local
-from . import base
 
-
-class SharepointStorage(base.StorageService):
+class SharepointStorage:
     """Sharepoint Storage Service."""
 
     def __init__(
         self,
-        url: str,
-        root: str,
-        username: str,
-        password: str,
+        url: str = conf.settings.SHAREPOINT_URL,
+        root: str = conf.settings.SHAREPOINT_LIST,
+        username: str = conf.settings.SHAREPOINT_USERNAME,
+        password: str = conf.settings.SHAREPOINT_PASSWORD,
     ) -> None:
         """Instantiates the Sharepoint Storage.
 
@@ -85,6 +83,23 @@ class SharepointStorage(base.StorageService):
 
         # Return
         return temp_file
+
+    def get_from_url(self, url: str) -> pathlib.Path:
+        """Retrieves a file given a Sharepoint URL.
+
+        Args:
+            url (str): URL to the file to be downloaded.
+
+        Returns:
+            pathlib.Path: Retrieved file contents as a temporary file.
+        """
+        # Just parse the filepath relative to the root
+        # Strip the leading slash if applicable
+        path = url.split(self.root, 1)[-1]
+        path = path.lstrip("/")
+
+        # Get and Return
+        return self.get(path)
 
     def put(self, path: str, contents: bytes) -> str:
         """Puts a file into the Sharepoint Storage.

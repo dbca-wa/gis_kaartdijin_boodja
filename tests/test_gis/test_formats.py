@@ -77,16 +77,8 @@ def test_formats(data_file: str, yaml_file: str) -> None:
             assert attribute.name == expected_attribute[1]
             assert attribute.type == expected_attribute[2]
 
-        # Check symbology
-        if not expected_layer["symbology"]:
-            # No symbology - assert error
-            with pytest.raises(ValueError, match="Layer '.*' does not contain any symbology"):
-                # Attempt to extract symbology
-                layer.symbology()
+        # Extract symbology
+        symbology = layer.symbology()
 
-        else:
-            # Extract symbology
-            symbology = layer.symbology()
-
-            # Assert
-            assert symbology.sld == expected_layer["symbology"]
+        # Assert
+        assert symbology.sld == (expected_layer["symbology"] or readers.base.DEFAULT_SLD)

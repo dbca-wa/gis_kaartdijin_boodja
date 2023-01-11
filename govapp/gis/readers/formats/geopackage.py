@@ -8,7 +8,6 @@ import pathlib
 # Local
 from .. import base
 from .. import types
-from ... import utils
 
 # Third-Party
 from dateutil import parser
@@ -53,7 +52,7 @@ class GeopackageReader(base.LayerReader):
             models.Metadata: Extracted metadata.
         """
         # Extract Name and Description from Metadata
-        name = self.layer.GetName()
+        name = self.name
         description = self.layer.GetMetadataItem("DESCRIPTION") or ""  # Blank
 
         # Handle Errors
@@ -62,7 +61,7 @@ class GeopackageReader(base.LayerReader):
             layer: ogr.Layer = self.datasource.ExecuteSQL(
                 "SELECT last_change "  # noqa: S608
                 "FROM gpkg_contents "
-                f"WHERE table_name = '{self.layer.GetName()}'"
+                f"WHERE table_name = '{name}'"
             )
             feature: ogr.Feature = layer.GetNextFeature()
             field: str = feature.GetField(0)
@@ -85,46 +84,34 @@ class GeopackageReader(base.LayerReader):
         Returns:
             models.Symbology: Extracted symbology.
         """
-        # Precompute error message
-        message = f"Layer '{self.name}' does not contain any symbology"
+        # Try Extract Symbology
+        try:
+            # Extract Symbology with from Layer Styles Table
+            layer: ogr.Layer = self.datasource.GetLayerByName("layer_styles")
 
-        # Extract Symbology with from Layer Styles Table
-        layer: ogr.Layer = utils.raise_if_none(
-            value=self.datasource.GetLayerByName("layer_styles"),
-            message=message,
-        )
+            # Filter
+            layer.SetAttributeFilter(f"f_table_name = '{self.name}'")
 
-        # Filter
-        layer.SetAttributeFilter(f"f_table_name = '{self.layer.GetName()}'")
+            # Get Feature
+            feature: ogr.Feature = layer.GetNextFeature()
 
-        # Get Feature
-        feature: ogr.Feature = utils.raise_if_none(
-            value=layer.GetNextFeature(),
-            message=message,
-        )
+            # Get Style Name and SLD Indexes
+            name_index: int = feature.GetFieldIndex("styleName")
+            sld_index: int = feature.GetFieldIndex("styleSLD")
 
-        # Get Style Name and SLD Indexes
-        name_index: int = utils.raise_if_none(
-            value=feature.GetFieldIndex("styleName"),
-            message=message,
-        )
-        sld_index: int = utils.raise_if_none(
-            value=feature.GetFieldIndex("styleSLD"),
-            message=message,
-        )
+            # Get Style Name and SLD
+            name: str = feature.GetField(name_index)
+            sld: str = feature.GetField(sld_index)
 
-        # Get Style Name and SLD
-        name: str = utils.raise_if_none(
-            value=feature.GetField(name_index),
-            message=message,
-        )
-        sld: str = utils.raise_if_none(
-            value=feature.GetField(sld_index),
-            message=message,
-        )
+            # Construct Symbology
+            symbology = types.Symbology(
+                name=name,
+                sld=sld,
+            )
 
-        # Construct and Return Symbology
-        return types.Symbology(
-            name=name,
-            sld=sld,
-        )
+        except Exception:
+            # Retrieve Default Symbology
+            symbology = super().symbology()
+
+        # Return Symbology
+        return symbology

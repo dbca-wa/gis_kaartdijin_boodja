@@ -9,7 +9,9 @@ import reversion
 from . import catalogue_entries
 from . import layer_metadata
 from .. import mixins
+from .. import sharepoint
 from .. import utils
+from .... import gis
 
 # Typing
 from typing import cast
@@ -127,3 +129,14 @@ class LayerSubmission(mixins.RevisionedMixin):
             # Create New Inactive Layer Submission with Status DECLINED
             self.status = LayerSubmissionStatus.DECLINED
             self.save()
+
+    def publish(self) -> None:
+        """Publishes the layer to GeoServer."""
+        # Retrieve the File from Storage
+        filepath = sharepoint.SharepointStorage().get_from_url(url=self.file)
+
+        # Convert Layer to GeoPackage
+        geopackage = gis.conversions.to_geopackage(filepath, layer=self.name)
+
+        # Push Layer to GeoServer
+        gis.geoserver.GeoServer().upload_geopackage(geopackage)

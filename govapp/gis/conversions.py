@@ -2,12 +2,17 @@
 
 
 # Standard
+import logging
 import pathlib
 import subprocess  # noqa: S404
 import tempfile
 
 # Local
 from . import compression
+
+
+# Logging
+log = logging.getLogger(__name__)
 
 
 def to_geopackage(filepath: pathlib.Path, layer: str) -> pathlib.Path:
@@ -20,6 +25,9 @@ def to_geopackage(filepath: pathlib.Path, layer: str) -> pathlib.Path:
     Returns:
         pathlib.Path: Path to the converted GeoPackage file.
     """
+    # Log
+    log.info(f"Converting file '{filepath}' layer: '{layer}' to GeoPackage")
+
     # Decompress and Flatten if Required
     filepath = compression.decompress(filepath)
     filepath = compression.flatten(filepath)

@@ -10,7 +10,7 @@ from django import conf
 # Local
 from . import absorber
 from . import emails
-from . import storage
+from . import sharepoint
 from ..accounts import utils
 
 
@@ -24,12 +24,7 @@ class Scanner:
     def __init__(self) -> None:
         """Instantiates the Scanner."""
         # Storage
-        self.storage = storage.sharepoint.SharepointStorage(
-            url=conf.settings.SHAREPOINT_URL,
-            root=conf.settings.SHAREPOINT_LIST,
-            username=conf.settings.SHAREPOINT_USERNAME,
-            password=conf.settings.SHAREPOINT_PASSWORD,
-        )
+        self.storage = sharepoint.SharepointStorage()
 
     def scan(self) -> None:
         """Scans for new files in the staging area to be absorbed."""

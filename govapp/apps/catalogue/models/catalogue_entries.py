@@ -19,7 +19,12 @@ from typing import TYPE_CHECKING, Optional, Union
 
 # Type Checking
 if TYPE_CHECKING:
+    from . import layer_attributes
+    from . import layer_metadata
     from . import layer_submissions
+    from . import layer_subscriptions
+    from . import layer_symbology
+    from . import notifications
 
 
 # Shortcuts
@@ -68,6 +73,16 @@ class CatalogueEntry(mixins.RevisionedMixin):
         related_name="assigned",
         on_delete=models.SET_NULL,
     )
+
+    # Type Hints for Reverse Relations
+    # These aren't exactly right, but are useful for catching simple mistakes.
+    attributes: "models.Manager[layer_attributes.LayerAttribute]"
+    layers: "models.Manager[layer_submissions.LayerSubmission]"
+    metadata: "layer_metadata.LayerMetadata"
+    subscription: "layer_subscriptions.LayerSubscription"
+    symbology: "layer_symbology.LayerSymbology"
+    email_notifications: "models.Manager[notifications.EmailNotification]"
+    webhook_notifications: "models.Manager[notifications.WebhookNotification]"
 
     class Meta:
         """Catalogue Entry Model Metadata."""
@@ -195,6 +210,9 @@ class CatalogueEntry(mixins.RevisionedMixin):
             else:
                 # Set Catalogue Entry to Pending
                 self.status = CatalogueEntryStatus.PENDING
+
+            # Publish the Symbology
+            self.symbology.publish()
 
             # Save the Catalogue Entry
             self.save()

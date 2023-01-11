@@ -14,15 +14,10 @@ from django.db import transaction
 # Local
 from . import emails
 from . import models
-from . import storage
+from . import sharepoint
 from . import utils
 from ..accounts import utils as accounts_utils
-from ...gis import conversions
-from ...gis import geoserver
 from ...gis import readers
-
-# Typing
-from typing import Optional
 
 
 # Logging
@@ -35,20 +30,7 @@ class Absorber:
     def __init__(self) -> None:
         """Instantiates the Absorber."""
         # Storage
-        self.storage = storage.sharepoint.SharepointStorage(
-            url=conf.settings.SHAREPOINT_URL,
-            root=conf.settings.SHAREPOINT_LIST,
-            username=conf.settings.SHAREPOINT_USERNAME,
-            password=conf.settings.SHAREPOINT_PASSWORD,
-        )
-
-        # GeoServer
-        self.geoserver = geoserver.GeoServer(
-            service_url=conf.settings.GEOSERVER_URL,
-            username=conf.settings.GEOSERVER_USERNAME,
-            password=conf.settings.GEOSERVER_PASSWORD,
-            workspace=conf.settings.GEOSERVER_WORKSPACE,
-        )
+        self.storage = sharepoint.SharepointStorage()
 
     def absorb(self, path: str) -> None:
         """Absorbs new layers into the system.
@@ -101,18 +83,10 @@ class Absorber:
         # Log
         log.info(f"Extracting data from layer: '{layer.name}'")
 
-        # Extract metadata and attributes (required)
+        # Extract metadata, attributes and symbology
         metadata = layer.metadata()
         attributes = layer.attributes()
-
-        # Attempt to extract symbology (optional)
-        try:
-            # Extract symbology
-            symbology = layer.symbology()
-
-        except ValueError:
-            # Could not extract symbology
-            symbology = None
+        symbology = layer.symbology()
 
         # Retrieve existing catalogue entry from the database
         catalogue_entry = models.catalogue_entries.CatalogueEntry.objects.filter(name=metadata.name).first()
@@ -120,26 +94,18 @@ class Absorber:
         # Check existing catalogue entry
         if not catalogue_entry:
             # Create
-            success = self.create_catalogue_entry(metadata, attributes, symbology, archive)
+            self.create_catalogue_entry(metadata, attributes, symbology, archive)
 
         else:
             # Update
-            success = self.update_catalogue_entry(catalogue_entry, metadata, attributes, symbology, archive)
-
-        # Check success
-        if success:
-            # Convert Layer to GeoPackage
-            geopackage = conversions.to_geopackage(filepath, layer=metadata.name)
-
-            # Push to GeoServer
-            self.geoserver.upload_geopackage(geopackage)
+            self.update_catalogue_entry(catalogue_entry, metadata, attributes, symbology, archive)
 
     @transaction.atomic()
     def create_catalogue_entry(
         self,
         metadata: readers.types.Metadata,
         attributes: list[readers.types.Attribute],
-        symbology: Optional[readers.types.Symbology],
+        symbology: readers.types.Symbology,
         archive: str,
     ) -> bool:
         """Creates a new catalogue entry with the supplied values.
@@ -147,7 +113,7 @@ class Absorber:
         Args:
             metadata (Metadata): Metadata for the entry.
             attributes (list[Attribute]): Attributes for the entry.
-            symbology (Optional[Symbology]): Symbology for the entry.
+            symbology (Symbology): Symbology for the entry.
             archive (str): Archive URL for the entry
 
         Returns:
@@ -193,14 +159,16 @@ class Absorber:
                 catalogue_entry=catalogue_entry,
             )
 
-        # Check symbology
-        if symbology:
-            # Create Layer Symbology
-            models.layer_symbology.LayerSymbology.objects.create(
-                name=symbology.name,
-                sld=symbology.sld,
-                catalogue_entry=catalogue_entry,
-            )
+        # Create Layer Symbology
+        models.layer_symbology.LayerSymbology.objects.create(
+            name=symbology.name,
+            sld=symbology.sld,
+            catalogue_entry=catalogue_entry,
+        )
+
+        # Publish Layer and Symbology
+        catalogue_entry.active_layer.publish()
+        catalogue_entry.symbology.publish()
 
         # Send Emails!
         emails.CatalogueEntryCreatedEmail().send_to_users(
@@ -216,7 +184,7 @@ class Absorber:
         catalogue_entry: models.catalogue_entries.CatalogueEntry,
         metadata: readers.types.Metadata,
         attributes: list[readers.types.Attribute],
-        symbology: Optional[readers.types.Symbology],
+        symbology: readers.types.Symbology,
         archive: str,
     ) -> bool:
         """Creates a new catalogue entry with the supplied values.
@@ -225,7 +193,7 @@ class Absorber:
             catalogue_entry (CatalogueEntry): Catalogue entry to update.
             metadata (Metadata): Metadata for the entry.
             attributes (list[Attribute]): Attributes for the entry.
-            symbology (Optional[Symbology]): Symbology for the entry.
+            symbology (Symbology): Symbology for the entry.
             archive (str): Archive URL for the entry.
 
         Returns:
@@ -256,6 +224,9 @@ class Absorber:
 
         # Check Layer Submission
         if success:
+            # Publish Layer
+            catalogue_entry.active_layer.publish()
+
             # Send Update Success Email
             emails.CatalogueEntryUpdateSuccessEmail().send_to_users(
                 *accounts_utils.all_administrators(),  # Send to all administrators

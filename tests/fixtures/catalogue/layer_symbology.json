@@ -4,7 +4,7 @@
         "pk": 1,
         "fields": {
             "name": "Layer Symbology 1",
-            "sld": "This is some fake SLD XML",
+            "sld": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\r\n<StyledLayerDescriptor xmlns=\"http:\/\/www.opengis.net\/sld\" xmlns:xlink=\"http:\/\/www.w3.org\/1999\/xlink\" xmlns:xsi=\"http:\/\/www.w3.org\/2001\/XMLSchema-instance\" xsi:schemaLocation=\"http:\/\/www.opengis.net\/sld http:\/\/schemas.opengis.net\/sld\/1.1.0\/StyledLayerDescriptor.xsd\" xmlns:ogc=\"http:\/\/www.opengis.net\/ogc\" version=\"1.1.0\" xmlns:se=\"http:\/\/www.opengis.net\/se\">\r\n  <NamedLayer>\r\n  <se:Name><\/se:Name>\r\n  <\/NamedLayer>\r\n<\/StyledLayerDescriptor>",
             "catalogue_entry": 1
         }
     },
@@ -13,7 +13,7 @@
         "pk": 2,
         "fields": {
             "name": "Layer Symbology 2",
-            "sld": "This is some fake SLD XML",
+            "sld": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\r\n<StyledLayerDescriptor xmlns=\"http:\/\/www.opengis.net\/sld\" xmlns:xlink=\"http:\/\/www.w3.org\/1999\/xlink\" xmlns:xsi=\"http:\/\/www.w3.org\/2001\/XMLSchema-instance\" xsi:schemaLocation=\"http:\/\/www.opengis.net\/sld http:\/\/schemas.opengis.net\/sld\/1.1.0\/StyledLayerDescriptor.xsd\" xmlns:ogc=\"http:\/\/www.opengis.net\/ogc\" version=\"1.1.0\" xmlns:se=\"http:\/\/www.opengis.net\/se\">\r\n  <NamedLayer>\r\n  <se:Name><\/se:Name>\r\n  <\/NamedLayer>\r\n<\/StyledLayerDescriptor>",
             "catalogue_entry": 2
         }
     },
@@ -22,7 +22,7 @@
         "pk": 3,
         "fields": {
             "name": "Layer Symbology 3",
-            "sld": "This is some fake SLD XML",
+            "sld": "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\r\n<StyledLayerDescriptor xmlns=\"http:\/\/www.opengis.net\/sld\" xmlns:xlink=\"http:\/\/www.w3.org\/1999\/xlink\" xmlns:xsi=\"http:\/\/www.w3.org\/2001\/XMLSchema-instance\" xsi:schemaLocation=\"http:\/\/www.opengis.net\/sld http:\/\/schemas.opengis.net\/sld\/1.1.0\/StyledLayerDescriptor.xsd\" xmlns:ogc=\"http:\/\/www.opengis.net\/ogc\" version=\"1.1.0\" xmlns:se=\"http:\/\/www.opengis.net\/se\">\r\n  <NamedLayer>\r\n  <se:Name><\/se:Name>\r\n  <\/NamedLayer>\r\n<\/StyledLayerDescriptor>",
             "catalogue_entry": 3
         }
     }

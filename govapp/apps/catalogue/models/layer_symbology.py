@@ -8,6 +8,7 @@ import reversion
 # Local
 from . import catalogue_entries
 from .. import mixins
+from .... import gis
 
 
 @reversion.register()
@@ -34,3 +35,8 @@ class LayerSymbology(mixins.RevisionedMixin):
         """
         # Generate String and Return
         return f"{self.name}"
+
+    def publish(self) -> None:
+        """Publishes the style to GeoServer."""
+        # Push Style to GeoServer
+        gis.geoserver.GeoServer().upload_style(self.name, self.sld)

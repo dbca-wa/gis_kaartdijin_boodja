@@ -2,6 +2,7 @@
 
 
 # Standard
+import logging
 import pathlib
 import tarfile
 import zipfile
@@ -9,6 +10,10 @@ import zipfile
 # Third-Party
 import py7zr
 import rarfile
+
+
+# Logging
+log = logging.getLogger(__name__)
 
 
 def decompress(file: pathlib.Path) -> pathlib.Path:
@@ -20,6 +25,9 @@ def decompress(file: pathlib.Path) -> pathlib.Path:
     Returns:
         pathlib.Path: Path to the decompressed directory.
     """
+    # Log
+    log.info(f"Attemping to decompress '{file}' if required")
+
     # Check file
     if zipfile.is_zipfile(file):
         # `.zip`
@@ -43,11 +51,18 @@ def decompress(file: pathlib.Path) -> pathlib.Path:
 
     # Check
     if not algorithm:
+        # Log
+        log.info("No compression detected, leaving unchanged")
+
         # Return the file unchanged
         return file
 
     # Construct Path for Extraction
     extracted_path = file.with_name(f"extracted_{file.stem}")
+
+    # Log
+    log.info(f"Detected compression '{algorithm}'")
+    log.info(f"Decompressing '{file}' -> '{extracted_path}'")
 
     # Decompress
     with algorithm(file) as archive:
@@ -67,13 +82,22 @@ def flatten(path: pathlib.Path) -> pathlib.Path:
     Returns:
         pathlib.Path: Flattened directory.
     """
+    # Log
+    log.info(f"Attemping to flatten '{path}' if required")
+
     # Enumerate subdirectories
     subdirs = [p for p in path.glob("*") if p.is_dir()]
 
     # Check if there is a single directory inside
     if len(subdirs) == 1:
+        # Log
+        log.info(f"Flattened '{path}' -> {subdirs[0]}")
+
         # Recurse, flatten that directory also if applicable and return
         return flatten(subdirs[0])
+
+    # Log
+    log.info("No flattening required, leaving unchanged")
 
     # Return
     return path

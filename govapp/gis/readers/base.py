@@ -13,6 +13,10 @@ from . import types
 from osgeo import ogr
 
 
+# Load Default SLD
+DEFAULT_SLD = pathlib.Path(__file__).with_name("default.sld").read_text()
+
+
 class LayerReader(abc.ABC):
     """Layer Reader Abstract Base Class."""
 
@@ -137,17 +141,19 @@ class LayerReader(abc.ABC):
     def symbology(self) -> types.Symbology:
         """Extracts symbology.
 
-        The default behaviour on the base class is to raise an error, assuming
-        that the file has no symbology. This is because there is no standard
-        way to include symbology (styling) in every format. As such, if it is
-        included it must be extracted manually on the subclass.
+        The default behaviour on the base class is to return an empty symbology
+        representation, assuming that the file has no symbology. This is
+        because there is no standard way to include symbology (styling) in
+        every format. As such, if it is included it must be extracted manually
+        on the subclass.
 
         Returns:
             models.Symbology: Extracted symbology.
         """
-        # Raise
-        raise ValueError(
-            f"Layer '{self.name}' does not contain any symbology"
+        # Construct and Return Empty Symbology
+        return types.Symbology(
+            name=self.name,  # Layer Name from GDAL
+            sld=DEFAULT_SLD,  # Default Empty SLD
         )
 
 
