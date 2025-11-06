@@ -455,16 +455,6 @@ class GeoServerPublishChannel(mixins.RevisionedMixin):
                 new_sld=symbology.sld,
                 use_raw=symbology.use_raw
             )
-            # if style_uploaded:
-            #     # geoserver.set_style_to_layer(
-            #     #     self.publish_entry.catalogue_entry.name,
-            #     #     self.publish_entry.catalogue_entry.symbology.name
-            #     # )
-            #     geoserver.set_default_style_to_layer(
-            #         self.publish_entry.catalogue_entry.symbology.name,
-            #         self.workspace.name,
-            #         self.publish_entry.catalogue_entry.name
-            #     )
         else:
             log.info(f'CatalogueEntry: [{self.publish_entry.catalogue_entry}] does not have Symbology.')
 
