@@ -143,7 +143,8 @@ class GeoServer:
         workspace: str,
         layer: str,
         filepath: pathlib.Path,
-        chunk_size: Optional[int] = 1024 * 1024  # 1MB chunks by default
+        chunk_size: Optional[int] = 1024 * 1024,  # 1MB chunks by default
+        memory_map_size: Optional[int] = None,
     ) -> None:
         """Uploads a Geopackage file to the GeoServer.
 
@@ -171,6 +172,11 @@ class GeoServer:
             'update': 'overwrite',
             'configure': 'all'
         }
+
+        # Add the memory map size to the query parameters ONLY if it's provided.
+        if memory_map_size is not None:
+            # The key for the query parameter is 'mmap'.
+            params['mmap'] = str(memory_map_size)
 
         # Log file size for monitoring
         file_size = filepath.stat().st_size
