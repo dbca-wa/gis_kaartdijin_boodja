@@ -101,6 +101,7 @@ class GeoServerPublishChannelAdmin(reversion.admin.VersionAdmin):
         'workspace_link',
         'srs',
         'active',
+        'gpkg_memory_map_size',
         'override_bbox',
         'native_crs',
         'nbb_minx',
