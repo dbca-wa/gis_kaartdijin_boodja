@@ -489,6 +489,7 @@ class GeoServerPublishChannel(mixins.RevisionedMixin):
                 workspace=self.workspace.name,
                 layer=self.publish_entry.catalogue_entry.metadata.name,
                 filepath=geopackage['full_filepath'],
+                memory_map_size_mb=self.gpkg_memory_map_size
             )
         elif self.store_type == StoreType.GEOTIFF:
             workspace_name = self.workspace.name
