@@ -16,6 +16,7 @@ from django.utils import timezone
 import httpx
 import reversion
 from django.template import Template, Context
+from django.core.validators import MinValueValidator
 from datetime import datetime
 
 # Local
@@ -309,6 +310,19 @@ class GeoServerPublishChannel(mixins.RevisionedMixin):
     create_cached_layer = models.BooleanField(default=True, blank=True)
     expire_server_cache_after_n_seconds = models.IntegerField(default=0, null=False, blank=False)  # meaningfull only if create_cached_layer is True
     expire_client_cache_after_n_seconds = models.IntegerField(default=0, null=False, blank=False)  # meaningfull only if create_cached_layer is True
+    # GeoPackage Memory Map Size (MB)
+    gpkg_memory_map_size = models.IntegerField(
+        verbose_name="GeoPackage Memory Map Size (MB)",
+        null=True,
+        blank=True,
+        help_text=(
+            "Optional. The memory map size in Megabytes (MB) for this GeoPackage data store. "
+            "Leave blank to use the GeoServer default."
+        ),
+        validators=[
+            MinValueValidator(0)
+        ]
+    )
 
     objects = GeoServerPublishChannelManager()
 
