@@ -262,6 +262,19 @@ var kbpublish = {
             otherOptions.fadeOut(500)
         }
     },
+    // A function to toggle the visibility of the memory map size field
+    toggleMemoryMapField: function() {
+        const storeTypeSelect = $('#new-publish-store-type');
+        const memoryMapRow = $('#gpkg-memory-map-size-row');
+
+        const GEOPACKAGE_VALUE = '1'; // Check class StoreType
+
+        if (storeTypeSelect.val() === GEOPACKAGE_VALUE) {
+            memoryMapRow.slideDown(); // Show the field with a smooth animation
+        } else {
+            memoryMapRow.slideUp(); // Hide the field
+        }
+    },
     init_publish_item: function() {    
         $.ajax({
             url: kbpublish.var.ftp_server_url,
@@ -335,7 +348,7 @@ var kbpublish = {
         });
         $("#publish-new-ftp-btn" ).click(function() {
             $('#new-publish-ftp-name').removeAttr('disabled');
-            $('#new-publish-ftp-server-format').removeAttr('disabled');                
+            $('#new-publish-ftp-server-format').removeAttr('disabled');
             $('#new-publish-ftp-spatial-format').removeAttr('disabled');
             $('#new-publish-ftp-frequency-type').removeAttr('disabled');
             $('#new-publish-ftp-spatial-mode').removeAttr('disabled');  
@@ -456,6 +469,11 @@ var kbpublish = {
         });
         kbpublish.retrieve_communication_types();
         this.retrieve_noti_types(()=>table.refresh(this.get_email_notification));
+        
+        // Bind the function to the 'change' event of the store type dropdown
+        $('#new-publish-store-type').on('change', kbpublish.toggleMemoryMapField);
+        // Call the function once on page load to set the initial state
+        kbpublish.toggleMemoryMapField();
     },
     retrieve_noti_types: function(post_callback){
         $.ajax({
