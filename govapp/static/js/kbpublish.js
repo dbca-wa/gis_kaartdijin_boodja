@@ -920,6 +920,7 @@ var kbpublish = {
         let newpublishCreateCachedLayer = $('#new-publish-create-cached-layer').is(':checked');
         let expireServerCacheInSeconds = $('#expire-server-cache-after-n-seconds').val();
         let expireClientCacheInSeconds = $('#expire-client-cache-after-n-seconds').val();
+        let gpkgMemoryMapSize = $('#new-publish-gpkg-memory-map-size').val();
 
         // Validate data
         if (newpublishgeoserverpool.length < 1) {
@@ -965,7 +966,8 @@ var kbpublish = {
             "active": newpublishactive,
             "create_cached_layer": newpublishCreateCachedLayer,
             "expire_server_cache_after_n_seconds": expireServerCacheInSeconds,
-            "expire_client_cache_after_n_seconds": expireClientCacheInSeconds
+            "expire_client_cache_after_n_seconds": expireClientCacheInSeconds,
+            "gpkg_memory_map_size": gpkgMemoryMapSize === '' ? null : gpkgMemoryMapSize
         };
 
         let csrf_token = $("#csrfmiddlewaretoken").val();
@@ -1859,6 +1861,7 @@ var kbpublish = {
             $('#new-publish-create-cached-layer').removeAttr('disabled').prop('checked', this.toBoolean(geoserver_publish_channel_obj.create_cached_layer));  
             $('#expire-server-cache-after-n-seconds').removeAttr('disabled').val(geoserver_publish_channel_obj.expire_server_cache_after_n_seconds);
             $('#expire-client-cache-after-n-seconds').removeAttr('disabled').val(geoserver_publish_channel_obj.expire_client_cache_after_n_seconds);
+            $('#new-publish-gpkg-memory-map-size').removeAttr('disabled').val(geoserver_publish_channel_obj.gpkg_memory_map_size);
         } else { // Create new
             $('#new-update-geoserver-modal-title').text('Create New Geoserver Publish Entry');
             $('#create-update-publish-geoserver-btn').text('Create');
@@ -1872,6 +1875,7 @@ var kbpublish = {
             $('#new-publish-create-cached-layer').removeAttr('disabled').prop('checked', true);
             $('#expire-server-cache-after-n-seconds').removeAttr('disabled').val(0);
             $('#expire-client-cache-after-n-seconds').removeAttr('disabled').val(0);
+            $('#new-publish-gpkg-memory-map-size').removeAttr('disabled').val('');
         }
         // Remove success/error message
         $('#new-publish-new-geoserver-popup-error').html('').hide();
