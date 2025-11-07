@@ -721,9 +721,6 @@ var kbpublish = {
         let expire_server_cache_after_n_seconds = $('#expire-server-cache-after-n-seconds').val();
         let expire_client_cache_after_n_seconds = $('#expire-client-cache-after-n-seconds').val();
 
-        console.log({expire_client_cache_after_n_seconds})
-        console.log({expire_server_cache_after_n_seconds})
-
         // 2. Validate data
         let errors = [];
         if (geoserver_pool.length < 1) {
@@ -2018,42 +2015,6 @@ var kbpublish = {
             error: error_callback
         });
     },
-    // update_publish_geoserver: function(success_callback, error_callback, geoserver_pool_id, format_id, frequency_id, workspace_id, publish_id){
-    //     // get & validation check
-    //     const mode = utils.validate_empty_input('format', $('#'+format_id).val());
-    //     const frequency = utils.validate_empty_input('frequency', $('#'+frequency_id).val());
-    //     const workspace = utils.validate_empty_input('workspace', $('#'+workspace_id).val());
-    //     const geoserver_pool = utils.validate_empty_input('geoserver_pool', $('#'+geoserver_pool_id).val());
-        
-    //     // make data body
-    //     var geoserver_data = {
-    //         geoserver_pool: geoserver_pool,
-    //         mode:mode,
-    //         frequency:frequency,
-    //         workspace:workspace,
-    //         publish_entry:$('#publish-entry-id').val()
-    //     };
-    //     var url = this.var.publish_save_geoserver_url;
-    //     var method = 'POST';
-    //     if(publish_id){
-    //         delete geoserver_data['publish_entry'];
-    //         url += publish_id+'/';
-    //         method = 'PUT';
-    //     }
-
-    //     // call POST API
-    //     $.ajax({
-    //         url: url,
-    //         method: method,
-    //         dataType: 'json',
-    //         contentType: 'application/json',
-    //         headers: {'X-CSRFToken' : $("#csrfmiddlewaretoken").val()},
-    //         data: JSON.stringify(geoserver_data),
-    //         success: success_callback,
-    //         error: error_callback
-    //     });
-    // },
-
     get_publish_cddp: function() {
         var publish_id = $('#publish_id').val();
         $.ajax({
