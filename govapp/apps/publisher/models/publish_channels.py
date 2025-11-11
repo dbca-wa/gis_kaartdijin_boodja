@@ -308,8 +308,8 @@ class GeoServerPublishChannel(mixins.RevisionedMixin):
     store_type = models.IntegerField(choices=StoreType.choices, default=StoreType.GEOPACKAGE)
     # Cached layer
     create_cached_layer = models.BooleanField(default=True, blank=True)
-    expire_server_cache_after_n_seconds = models.IntegerField(default=0, null=False, blank=False)  # meaningfull only if create_cached_layer is True
-    expire_client_cache_after_n_seconds = models.IntegerField(default=0, null=False, blank=False)  # meaningfull only if create_cached_layer is True
+    expire_server_cache_after_n_seconds = models.IntegerField(default=300, null=False, blank=False)  # meaningfull only if create_cached_layer is True
+    expire_client_cache_after_n_seconds = models.IntegerField(default=60, null=False, blank=False)  # meaningfull only if create_cached_layer is True
     # GeoPackage Memory Map Size (MB)
     gpkg_memory_map_size = models.IntegerField(
         verbose_name="GeoPackage Memory Map Size (MB)",
