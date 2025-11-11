@@ -1,4 +1,4 @@
-django~=5.2.4
+django~=5.2.8
 django-extensions>=3.2.3
 djangorestframework>=3.14.0
 djangorestframework-datatables>=0.7.2
