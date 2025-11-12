@@ -6,6 +6,7 @@ import json
 import logging
 import pathlib
 import requests
+import time
 from django.template import loader
 
 # Third-Party
@@ -18,6 +19,7 @@ from django.template.loader import render_to_string
 
 from govapp import settings
 from govapp.common.utils import handle_http_exceptions
+import xml.etree.ElementTree as ET # Import the XML parser
 
 # Logging
 log = logging.getLogger(__name__)
@@ -171,6 +173,7 @@ class GeoServer:
             'filename': filepath.name,
             'update': 'overwrite',
             'configure': 'all'
+            # 'configure': 'none'
         }
 
         # Add the memory map size to the query parameters ONLY if it's provided.
@@ -626,35 +629,71 @@ class GeoServer:
         workspace_name: str,
         layer_name: str,
     ) -> None:
-        """Sets the default style for a layer in GeoServer.
-
-        Args:
-            workspace (str): Workspace to upload files to.
-            layer (str): Name of the layer to set default style for.
-            name (str): Name of the style.
         """
+        Sets the default style for a layer in GeoServer by fetching,
+        modifying, and putting back the layer configuration.
+        """
+        log.info(f"Setting default style '{style_name}' for layer '{layer_name}'...")
+
+        wait_seconds = 5
+        log.info(f"Waiting for {wait_seconds} seconds before fetching layer details...")
+        time.sleep(wait_seconds)
+
+        # --- Step 1: GET the current layer configuration ---
+        get_url = f"{self.service_url}/rest/layers/{workspace_name}:{layer_name}.xml"
+        
         try:
-            # Log
-            log.info(f"Setting style: [{style_name}] as default to the layer: [{layer_name}] in the GeoServer: [{self.service_url}]...")
+            log.info(f"Fetching current layer details from: {get_url}")
+            get_response = httpx.get(
+                url=get_url,
+                auth=(self.username, self.password),
+                timeout=30.0
+            )
+            get_response.raise_for_status()
 
-            # Set Default Layer Style
-            url = f"{self.service_url}/rest/workspaces/{workspace_name}/layers/{layer_name}.xml"
+            # --- Step 2: Parse the XML and modify the defaultStyle ---
+            # Parse the XML content from the response
+            tree = ET.fromstring(get_response.content)
 
-            # Perform Request
-            # This only works with XML (GeoServer is broken)
-            response = httpx.put(
-                url=url,
-                content=f"<layer><defaultStyle><name>{style_name}</name></defaultStyle></layer>",
+            # Find the <defaultStyle> element. If it doesn't exist, create it.
+            default_style_element = tree.find('defaultStyle')
+            if default_style_element is None:
+                default_style_element = ET.SubElement(tree, 'defaultStyle')
+
+            # Find the <name> element within <defaultStyle>. If it doesn't exist, create it.
+            name_element = default_style_element.find('name')
+            if name_element is None:
+                name_element = ET.SubElement(default_style_element, 'name')
+
+            # Set the new style name
+            name_element.text = style_name
+            
+            # Convert the modified XML tree back to a string
+            updated_xml_content = ET.tostring(tree, encoding='unicode')
+
+            # --- Step 3: PUT the modified full layer configuration back ---
+            put_url = f"{self.service_url}/rest/layers/{workspace_name}:{layer_name}.xml" # Can also use the same URL
+            log.info(f"Putting updated layer configuration to: {put_url}")
+            log.debug(f"Updated XML Payload: {updated_xml_content}") # For debugging
+
+            put_response = httpx.put(
+                url=put_url,
+                content=updated_xml_content,
                 headers={"Content-Type": "application/xml"},
                 auth=(self.username, self.password),
                 timeout=120.0
             )
+            put_response.raise_for_status()
+            log.info(f"Successfully set default style '{style_name}' for layer '{layer_name}'.")
 
-            # Log
-            log.info(f"GeoServer response: '{response.status_code}: {response.text}'")
-
-            # Check Response
-            response.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            # Provide more context on HTTP errors
+            error_text = e.response.text
+            log.error(
+                f"HTTP error while setting default style for '{layer_name}': "
+                f"Status {e.response.status_code}, Response: {error_text}"
+            )
+            raise  # Re-raise the exception
         except Exception as e:
             log.error(f"Unable to set the default style: [{style_name}] to the GeoServer: [{self.service_url}]: {e}")
 
@@ -934,6 +973,3 @@ def geoserverWithCustomCreds(url,username,password):
         username=username,
         password=password,
     )
-
-
-
