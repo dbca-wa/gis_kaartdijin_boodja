@@ -252,54 +252,86 @@ class GeoServer:
         filepath: pathlib.Path,
         chunk_size: Optional[int] = 1024 * 1024  # 1MB chunks by default
     ) -> None:
-        """Uploads a Geopackage file to the GeoServer.
+        """Uploads a GeoTIFF file. It forcefully attempts to clean up any pre-existing 
+        resources (layer and store) before uploading, ignoring 404 errors on delete."""
+        log.info(f"Preparing to upload GeoTiff '{filepath.name}' as resource '{layer}' in workspace '{workspace}'")
 
-        Args:
-            workspace (str): Workspace to upload files to.
-            layer (str): Name of the layer to upload GeoPackage for.
-            filepath (pathlib.Path): Path to the Geopackage file to upload.
-        """
-        # Log
-        log.info(f"Uploading GeoTiff '{filepath}' to GeoServer")
+        # --- START: FORCEFUL PRE-FLIGHT CLEANUP ---
+        # This approach attempts to delete both layer and store, ignoring 'Not Found' errors.
+        # This is more robust against inconsistencies where GET might fail but the resource exists.
+        try:
+            with requests.Session() as session:
+                session.auth = (self.username, self.password)
 
-        # Construct URL
-        url = f"{self.service_url}/rest/workspaces/{workspace}/coveragestores/{layer}/file.geotiff"
-        
-        headers = {
-            'Content-Type': 'image/tiff',
-            'Transfer-Encoding': 'chunked',
-            'Connection': 'keep-alive'
-        }
-        
-        params = {
-            'filename': layer,
-            'update': 'overwrite',
-            'configure': 'all',
-            # 'coverageName': layer
-        }
+                # Define URLs for both the layer and the store
+                # The layer name in the URL must be prefixed with the workspace
+                layer_delete_url = f"{self.service_url}/rest/layers/{workspace}:{layer}"
+                store_delete_url = f"{self.service_url}/rest/workspaces/{workspace}/coveragestores/{layer}?recurse=true"
 
+                # Step 1: Attempt to delete the LAYER first.
+                # An orphaned layer can prevent a store with the same name from being created.
+                log.info(f"Attempting to delete layer (if it exists): {layer_delete_url}")
+                layer_del_response = session.delete(layer_delete_url, timeout=(15, 120))
+                if layer_del_response.status_code == 200:
+                    log.info(f"Successfully deleted layer '{layer}'.")
+                elif layer_del_response.status_code == 404:
+                    log.info(f"Layer '{layer}' did not exist; no action needed.")
+                else:
+                    # If deletion fails for any other reason, raise an error.
+                    layer_del_response.raise_for_status()
+
+                # Step 2: Attempt to delete the COVERAGE STORE.
+                # Using recurse=true is a good practice, though the layer might be gone already.
+                log.info(f"Attempting to delete coverage store (if it exists): {store_delete_url}")
+                store_del_response = session.delete(store_delete_url, timeout=(15, 120))
+                if store_del_response.status_code == 200:
+                    log.info(f"Successfully deleted coverage store '{layer}'.")
+                elif store_del_response.status_code == 404:
+                    log.info(f"Coverage store '{layer}' did not exist; no action needed.")
+                else:
+                    store_del_response.raise_for_status()
+                
+                log.info(f"Pre-flight cleanup complete for resource '{layer}'.")
+
+        except requests.exceptions.RequestException as e:
+            log.error(f"An error occurred during pre-flight cleanup for resource '{layer}': {e}")
+            raise
+        # --- END: FORCEFUL PRE-FLIGHT CLEANUP ---
+
+
+        # --- UPLOAD LOGIC (This part remains the same) ---
+        upload_url = f"{self.service_url}/rest/workspaces/{workspace}/coveragestores/{layer}/file.geotiff"
+        headers = {'Content-Type': 'image/tiff'}
+        params = {'filename': layer, 'configure': 'all'}
         file_size = filepath.stat().st_size
-        log.info(f"File size: {file_size / (1024*1024):.2f} MB")
+        log.info(f"File size: {file_size / (1024*1024):.2f} MB. Starting streaming upload...")
 
-        with requests.Session() as session:
-            # Perform streaming upload
-            try:
+        # The rest of the function (the PUT request) remains identical to your current version.
+        # ... (your existing try/except block for the PUT request) ...
+        try:
+            with requests.Session() as session:
                 response = session.put(
-                    url=url,
+                    url=upload_url,
                     data=self._stream_file(filepath, chunk_size),
                     params=params,
                     headers=headers,
                     auth=(self.username, self.password),
-                    timeout=3000.0,
+                    timeout=(15, 3000.0),
                     stream=True
                 )
-
-                log.info(f"GeoServer response: '{response.status_code}: {response.text}'")
+                log.info(f"GeoServer response: [{response.status_code}]: [{response.text}]")
                 response.raise_for_status()
+                log.info(f"Successfully uploaded GeoTIFF and created resource '{layer}'.")
+        except requests.exceptions.HTTPError as e:
+            log.error(
+                f"HTTP Error during upload for store '{layer}'. "
+                f"Status Code: {e.response.status_code}. Response: {e.response.text}"
+            )
+            raise
+        except requests.exceptions.RequestException as e:
+            log.error(f"An unexpected error occurred during upload for store '{layer}'. Details: {e}")
+            raise
 
-            except requests.exceptions.RequestException as e:
-                log.error(f'Upload failed: [{str(e)}]')
-                raise
 
     @handle_http_exceptions(log)
     def create_layer_from_coveragestore(self, workspace: str, layer: str) -> None:
