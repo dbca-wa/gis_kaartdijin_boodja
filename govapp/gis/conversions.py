@@ -37,33 +37,67 @@ def to_geopackage(filepath: pathlib.Path, layer: str, catalogue_name: str, expor
         output_dir = tempfile.mkdtemp()
         output_filepath = pathlib.Path(output_dir) / f"{layer}.gpkg"
 
-        if export_method =='geoserver':
+        # --- START: NEW LOGIC TO DETECT RASTER/VECTOR ---
+        is_raster = filepath.suffix.lower() in ['.tif', '.tiff']
+        command = []
+
+        if is_raster:
+            # --- RASTER CONVERSION PATH (using gdal_translate) ---
+            log.info(f"Detected raster file ({filepath.suffix}), using gdal_translate.")
             command = [
-                "ogr2ogr",
-                "-overwrite",
-                str(output_filepath),
-                str(filepath),
-                str(layer),
-                "-nln",
-                str(layer),
+                "gdal_translate",
+                "-of", "GPKG",                   # Set output format to GeoPackage
+                "-co", "RASTER_TABLE=" + layer,  # Set the name of the raster table inside the GPKG
+                "-co", "TILING_SCHEME=GoogleMapsCompatible", # Recommended for performance
+                "-co", "COMPRESS=DEFLATE",       # Use lossless compression
+                str(filepath),                   # Input file
+                str(output_filepath),            # Output file
             ]
         else:
-            command = [
-                "ogr2ogr",
-                "-update",
-                "-overwrite",
-                "-nln", 
-                str(layer),                 #'Name' box in new CDDP dialogue
-                str(output_filepath),
-                str(filepath),              
-                str(catalogue_name)         # Catalogue name
-            ]
-        log.info(f"Running command: [{' '.join(command)}]")
+            # --- VECTOR CONVERSION PATH (using ogr2ogr) ---
+            log.info(f"Detected vector file ({filepath.suffix}), using ogr2ogr.")
+            if export_method =='geoserver':
+                command = [
+                    "ogr2ogr",
+                    "-overwrite",
+                    str(output_filepath),
+                    str(filepath),
+                    str(layer),
+                    "-nln",
+                    str(layer),
+                ]
+            else:
+                command = [
+                    "ogr2ogr",
+                    "-update",
+                    "-overwrite",
+                    "-nln", 
+                    str(layer),                 #'Name' box in new CDDP dialogue
+                    str(output_filepath),
+                    str(filepath),
+                    str(catalogue_name)         # Catalogue name
+                ]
+
+        if not command:
+            raise NotImplementedError(f"File type '{filepath.suffix}' is not supported for GeoPackage conversion.")
 
         # Run the command
-        subprocess.check_call(command)
-        log.info(f"Success: Converted file [{filepath}], layer: [{layer}] to GeoPackage successfully.")
+        result = subprocess.run(command, check=True, capture_output=True, text=True)
+        log.info(f"GDAL/OGR Output:\n{result.stdout}\n{result.stderr}")
+        log.info(f"Success: Converted file [{filepath}] to GeoPackage successfully.")
         
+        # Optional but recommended for rasters: Add overviews (pyramids) for better performance
+        if is_raster:
+            log.info("Adding overviews to the raster GeoPackage...")
+            gdaladdo_command = ["gdaladdo", "-r", "average", str(output_filepath), "2", "4", "8", "16"]
+            subprocess.run(gdaladdo_command, check=True, capture_output=True, text=True)
+            log.info("Overviews added successfully.")
+
+        # raise RuntimeError(
+        #     f"DEBUG: Process halted intentionally. "
+        #     f"Please inspect the generated GeoPackage file at: {output_filepath}"
+        # )
+
         converted = {"uncompressed_filepath": output_filepath.parent, "full_filepath": output_filepath,  "orignal_filepath": filepath}
         log.info(f'converted: [{converted}]')
 
@@ -73,13 +107,17 @@ def to_geopackage(filepath: pathlib.Path, layer: str, catalogue_name: str, expor
         log.error(f"The command has reached a timeout. Error converting file '{filepath}' layer: '{layer}' to GeoPackage: {e}")
         raise RuntimeError(f"Timeout error converting file '{filepath}' layer: '{layer}' to GeoPackage: {e}")
     except subprocess.CalledProcessError as e:
-        log.error(f"CalledProcessError: Error converting file '{filepath}' layer: '{layer}' to GeoPackage: {e}")
-        raise RuntimeError(f"CalledProcessError converting file '{filepath}' layer: '{layer}' to GeoPackage: {e}")
+        # Provide more detailed error info from the failed command
+        error_message = f"GDAL/OGR command failed with exit code {e.returncode}.\n"
+        error_message += f"Command: {' '.join(e.cmd)}\n"
+        error_message += f"Stderr: {e.stderr}"
+        log.error(error_message)
+        raise RuntimeError(error_message) # Re-raise with the detailed message
     except FileNotFoundError as e:
         log.error(f"FileNotFoundError: Error converting file '{filepath}' layer: '{layer}' to GeoPackage: {e}")
         raise RuntimeError(f"FileNotFoundError converting file '{filepath}' layer: '{layer}' to GeoPackage: {e}")
     except Exception as e:
-        log.error(f"Unexpected error converting file '{filepath}' layer: '{layer}' to GeoPackage: {e}")
+        log.error(f"Unexpected error converting file '{filepath}' layer: '{layer}' to GeoPackage: {e}", exc_info=True)
         raise
 
 
