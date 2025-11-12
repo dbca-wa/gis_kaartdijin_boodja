@@ -138,6 +138,72 @@ class GeoServer:
                 if not chunk:
                     break
                 yield chunk
+    
+    def _update_gpkg_datastore_params(
+        self,
+        workspace: str,
+        store_name: str,
+        params_to_update: dict
+    ) -> None:
+        """
+        Updates specific connection parameters for an existing GeoPackage datastore
+        """
+        if not params_to_update:
+            log.info("No datastore parameters to update.")
+            return
+
+        log.info(f"Updating datastore [{store_name}] with parameters: [{params_to_update}]")
+        datastore_url = f"{self.service_url}/rest/workspaces/{workspace}/datastores/{store_name}.json"
+
+        try:
+            with requests.Session() as session:
+                session.auth = (self.username, self.password)
+                headers = {'Content-type': 'application/json', 'Accept': 'application/json'}
+
+                # Step 1: GET the current datastore configuration
+                log.info("Fetching current datastore configuration...")
+                get_response = session.get(datastore_url, headers=headers)
+                get_response.raise_for_status()
+                datastore_data = get_response.json()
+                log.debug(f"Retrieved datastore configuration:\n{json.dumps(datastore_data, indent=2)}")
+
+                # Step 2: Modify the connection parameters in the correct structure
+                log.info("Modifying connection parameters...")
+                connection_params = datastore_data.setdefault("dataStore", {}).setdefault("connectionParameters", {})
+                entry_list = connection_params.setdefault("entry", [])
+
+                # For each parameter we want to update...
+                for key_to_update, value_to_update in params_to_update.items():
+                    found_and_updated = False
+                    # ...iterate through the existing entries...
+                    for entry_item in entry_list:
+                        # ...and if we find a matching key...
+                        if entry_item.get("@key") == key_to_update:
+                            # ...update its value and mark it as found.
+                            entry_item["$"] = str(value_to_update)
+                            found_and_updated = True
+                            break # Move to the next parameter to update
+                    
+                    # If after checking all entries, we didn't find the key...
+                    if not found_and_updated:
+                        # ...it means we need to add a new entry to the list.
+                        log.info(f"Key '{key_to_update}' not found, adding it as a new entry.")
+                        entry_list.append({"@key": key_to_update, "$": str(value_to_update)})
+
+                log.debug(f"Sending updated datastore configuration:\n{json.dumps(datastore_data, indent=2)}")
+
+                # Step 3: PUT the updated configuration back to the server
+                log.info("Sending updated configuration to GeoServer...")
+                put_response = session.put(datastore_url, json=datastore_data, headers=headers)
+                put_response.raise_for_status()
+                log.info(f"Successfully updated datastore '{store_name}'.")
+
+        except requests.exceptions.HTTPError as e:
+            log.error(f"Failed to update datastore '{store_name}'. Status: {e.response.status_code}, Response: {e.response.text}")
+            raise
+        except (KeyError, TypeError) as e:
+            log.error(f"Failed to parse datastore configuration for '{store_name}'. Structure might be unexpected. Details: {e}")
+            raise
 
     @handle_http_exceptions(log)
     def upload_geopackage(
@@ -243,6 +309,19 @@ class GeoServer:
             except requests.exceptions.RequestException as e:
                 log.error(f'Upload failed: [{str(e)}]')
                 raise
+
+            # --- START: DATATORE CONFIGURATION UPDATE STEP ---
+            # After the file upload (and async task) is successful,
+            # explicitly update the datastore's connection parameters.
+            if memory_map_size is not None:
+                try:
+                    # The connection parameter key for memory map size is "memory map size"
+                    params_to_update = {"memory map size": str(memory_map_size)}
+                    self._update_gpkg_datastore_params(workspace, layer, params_to_update)
+                except Exception as e:
+                    # Log a warning but don't fail the entire upload if only the config update fails
+                    log.warning(f"File was uploaded successfully, but failed to update memory map size for store [{layer}]. Please check manually. Error: {e}")
+            # --- END: DATATORE CONFIGURATION UPDATE STEP ---
 
     @handle_http_exceptions(log)
     def upload_tif(
