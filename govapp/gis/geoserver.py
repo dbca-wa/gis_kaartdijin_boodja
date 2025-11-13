@@ -243,9 +243,9 @@ class GeoServer:
         }
 
         # Add the memory map size to the query parameters ONLY if it's provided.
-        if memory_map_size is not None:
-            # The key for the query parameter is 'mmap'.
-            params['mmap'] = str(memory_map_size)
+        # if memory_map_size is not None:
+        #     # The key for the query parameter is 'mmap'.
+        #     params['mmap'] = str(memory_map_size)
 
         # Log file size for monitoring
         file_size = filepath.stat().st_size
@@ -270,40 +270,40 @@ class GeoServer:
                 # --- START: NEW ASYNCHRONOUS TASK HANDLING ---
                 if response.status_code == 202:
                     status_url = response.headers.get('Location')
-                    if not status_url:
+                    if status_url:
+                        log.info(f"GeoServer is processing the upload asynchronously. Polling status at: {status_url}")
+                        
+                        # Poll the status URL until the task is complete
+                        max_wait_seconds = 180 # Wait for a maximum of 3 minutes
+                        start_time = time.time()
+                        while time.time() - start_time < max_wait_seconds:
+                            try:
+                                status_response = session.get(status_url, auth=(self.username, self.password))
+                                status_response.raise_for_status()
+                                status_data = status_response.json()
+                                task_status = status_data.get('task', {}).get('state', 'PENDING').upper()
+
+                                if task_status == 'FINISHED':
+                                    log.info("GeoServer asynchronous processing finished successfully.")
+                                    return # The task is complete
+                                elif task_status in ['RUNNING', 'PENDING']:
+                                    log.info(f"Task status: {task_status}. Waiting...")
+                                    time.sleep(5) # Wait 5 seconds before polling again
+                                else: # FAILED, ABORTED
+                                    error_message = status_data.get('task', {}).get('error', {}).get('message', 'Unknown error')
+                                    log.error(f"GeoServer task failed with status '{task_status}': {error_message}")
+                                    raise RuntimeError(f"GeoServer task failed: {error_message}")
+
+                            except requests.exceptions.RequestException as e:
+                                log.error(f"Error polling task status: {e}")
+                                time.sleep(5)
+                        
+                        # If the loop finishes without returning, it timed out
+                        raise RuntimeError("GeoServer task timed out after waiting for 3 minutes.")
+                    else:
                         log.warning("GeoServer returned 202 but no Location header. Waiting a fixed time.")
                         time.sleep(5) # Fallback delay
                         return
-
-                    log.info(f"GeoServer is processing the upload asynchronously. Polling status at: {status_url}")
-                    
-                    # Poll the status URL until the task is complete
-                    max_wait_seconds = 180 # Wait for a maximum of 3 minutes
-                    start_time = time.time()
-                    while time.time() - start_time < max_wait_seconds:
-                        try:
-                            status_response = session.get(status_url, auth=(self.username, self.password))
-                            status_response.raise_for_status()
-                            status_data = status_response.json()
-                            task_status = status_data.get('task', {}).get('state', 'PENDING').upper()
-
-                            if task_status == 'FINISHED':
-                                log.info("GeoServer asynchronous processing finished successfully.")
-                                return # The task is complete
-                            elif task_status in ['RUNNING', 'PENDING']:
-                                log.info(f"Task status: {task_status}. Waiting...")
-                                time.sleep(5) # Wait 5 seconds before polling again
-                            else: # FAILED, ABORTED
-                                error_message = status_data.get('task', {}).get('error', {}).get('message', 'Unknown error')
-                                log.error(f"GeoServer task failed with status '{task_status}': {error_message}")
-                                raise RuntimeError(f"GeoServer task failed: {error_message}")
-
-                        except requests.exceptions.RequestException as e:
-                            log.error(f"Error polling task status: {e}")
-                            time.sleep(5)
-                    
-                    # If the loop finishes without returning, it timed out
-                    raise RuntimeError("GeoServer task timed out after waiting for 3 minutes.")
                 # --- END: NEW ASYNCHRONOUS TASK HANDLING ---
 
             except requests.exceptions.RequestException as e:
