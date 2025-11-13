@@ -262,6 +262,19 @@ var kbpublish = {
             otherOptions.fadeOut(500)
         }
     },
+    // A function to toggle the visibility of the memory map size field
+    toggleMemoryMapField: function() {
+        const storeTypeSelect = $('#new-publish-store-type');
+        const memoryMapRow = $('#gpkg-memory-map-size-row');
+
+        const GEOPACKAGE_VALUE = '1'; // Check class StoreType
+
+        if (storeTypeSelect.val() === GEOPACKAGE_VALUE) {
+            memoryMapRow.slideDown(); // Show the field with a smooth animation
+        } else {
+            memoryMapRow.slideUp(); // Hide the field
+        }
+    },
     init_publish_item: function() {    
         $.ajax({
             url: kbpublish.var.ftp_server_url,
@@ -335,7 +348,7 @@ var kbpublish = {
         });
         $("#publish-new-ftp-btn" ).click(function() {
             $('#new-publish-ftp-name').removeAttr('disabled');
-            $('#new-publish-ftp-server-format').removeAttr('disabled');                
+            $('#new-publish-ftp-server-format').removeAttr('disabled');
             $('#new-publish-ftp-spatial-format').removeAttr('disabled');
             $('#new-publish-ftp-frequency-type').removeAttr('disabled');
             $('#new-publish-ftp-spatial-mode').removeAttr('disabled');  
@@ -456,6 +469,11 @@ var kbpublish = {
         });
         kbpublish.retrieve_communication_types();
         this.retrieve_noti_types(()=>table.refresh(this.get_email_notification));
+        
+        // Bind the function to the 'change' event of the store type dropdown
+        $('#new-publish-store-type').on('change', kbpublish.toggleMemoryMapField);
+        // Call the function once on page load to set the initial state
+        kbpublish.toggleMemoryMapField();
     },
     retrieve_noti_types: function(post_callback){
         $.ajax({
@@ -703,9 +721,6 @@ var kbpublish = {
         let expire_server_cache_after_n_seconds = $('#expire-server-cache-after-n-seconds').val();
         let expire_client_cache_after_n_seconds = $('#expire-client-cache-after-n-seconds').val();
 
-        console.log({expire_client_cache_after_n_seconds})
-        console.log({expire_server_cache_after_n_seconds})
-
         // 2. Validate data
         let errors = [];
         if (geoserver_pool.length < 1) {
@@ -905,6 +920,7 @@ var kbpublish = {
         let newpublishCreateCachedLayer = $('#new-publish-create-cached-layer').is(':checked');
         let expireServerCacheInSeconds = $('#expire-server-cache-after-n-seconds').val();
         let expireClientCacheInSeconds = $('#expire-client-cache-after-n-seconds').val();
+        let gpkgMemoryMapSize = $('#new-publish-gpkg-memory-map-size').val();
 
         // Validate data
         if (newpublishgeoserverpool.length < 1) {
@@ -950,7 +966,8 @@ var kbpublish = {
             "active": newpublishactive,
             "create_cached_layer": newpublishCreateCachedLayer,
             "expire_server_cache_after_n_seconds": expireServerCacheInSeconds,
-            "expire_client_cache_after_n_seconds": expireClientCacheInSeconds
+            "expire_client_cache_after_n_seconds": expireClientCacheInSeconds,
+            "gpkg_memory_map_size": gpkgMemoryMapSize === '' ? null : gpkgMemoryMapSize
         };
 
         let csrf_token = $("#csrfmiddlewaretoken").val();
@@ -1844,6 +1861,7 @@ var kbpublish = {
             $('#new-publish-create-cached-layer').removeAttr('disabled').prop('checked', this.toBoolean(geoserver_publish_channel_obj.create_cached_layer));  
             $('#expire-server-cache-after-n-seconds').removeAttr('disabled').val(geoserver_publish_channel_obj.expire_server_cache_after_n_seconds);
             $('#expire-client-cache-after-n-seconds').removeAttr('disabled').val(geoserver_publish_channel_obj.expire_client_cache_after_n_seconds);
+            $('#new-publish-gpkg-memory-map-size').removeAttr('disabled').val(geoserver_publish_channel_obj.gpkg_memory_map_size);
         } else { // Create new
             $('#new-update-geoserver-modal-title').text('Create New Geoserver Publish Entry');
             $('#create-update-publish-geoserver-btn').text('Create');
@@ -1857,6 +1875,7 @@ var kbpublish = {
             $('#new-publish-create-cached-layer').removeAttr('disabled').prop('checked', true);
             $('#expire-server-cache-after-n-seconds').removeAttr('disabled').val(0);
             $('#expire-client-cache-after-n-seconds').removeAttr('disabled').val(0);
+            $('#new-publish-gpkg-memory-map-size').removeAttr('disabled').val('');
         }
         // Remove success/error message
         $('#new-publish-new-geoserver-popup-error').html('').hide();
@@ -2000,42 +2019,6 @@ var kbpublish = {
             error: error_callback
         });
     },
-    // update_publish_geoserver: function(success_callback, error_callback, geoserver_pool_id, format_id, frequency_id, workspace_id, publish_id){
-    //     // get & validation check
-    //     const mode = utils.validate_empty_input('format', $('#'+format_id).val());
-    //     const frequency = utils.validate_empty_input('frequency', $('#'+frequency_id).val());
-    //     const workspace = utils.validate_empty_input('workspace', $('#'+workspace_id).val());
-    //     const geoserver_pool = utils.validate_empty_input('geoserver_pool', $('#'+geoserver_pool_id).val());
-        
-    //     // make data body
-    //     var geoserver_data = {
-    //         geoserver_pool: geoserver_pool,
-    //         mode:mode,
-    //         frequency:frequency,
-    //         workspace:workspace,
-    //         publish_entry:$('#publish-entry-id').val()
-    //     };
-    //     var url = this.var.publish_save_geoserver_url;
-    //     var method = 'POST';
-    //     if(publish_id){
-    //         delete geoserver_data['publish_entry'];
-    //         url += publish_id+'/';
-    //         method = 'PUT';
-    //     }
-
-    //     // call POST API
-    //     $.ajax({
-    //         url: url,
-    //         method: method,
-    //         dataType: 'json',
-    //         contentType: 'application/json',
-    //         headers: {'X-CSRFToken' : $("#csrfmiddlewaretoken").val()},
-    //         data: JSON.stringify(geoserver_data),
-    //         success: success_callback,
-    //         error: error_callback
-    //     });
-    // },
-
     get_publish_cddp: function() {
         var publish_id = $('#publish_id').val();
         $.ajax({
