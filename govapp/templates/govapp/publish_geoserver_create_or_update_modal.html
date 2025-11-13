@@ -85,6 +85,20 @@
                                    </select>
                               </div>
                          </div>
+                         <div class='row align-items-center mb-3' id="gpkg-memory-map-size-row" style="display: none;">
+                              <div class='col-4 text-end'>
+                              </div>
+                              <div class='col-8'>
+                                   <div class='row mb-3'>
+                                        <div class='col-7'>
+                                             <label for="new-publish-gpkg-memory-map-size" class="form-label mb-0">GeoPackage Memory Map Size (MB)<br><span class="form-text">(Optional. Leave blank to use the GeoServer default.)</span></label>
+                                        </div>
+                                        <div class='col-4'>
+                                             <input type="number" class="form-control" id="new-publish-gpkg-memory-map-size" placeholder="e.g., 100">
+                                        </div>
+                                   </div>
+                              </div>
+                         </div>
                          <div class='row align-items-center mb-3'>
                               <div class='col-4 text-end'>
                                    <label for="" class="form-label mb-0">Active</label>
@@ -111,7 +125,7 @@
                               <div class='col-8'>
                                    <div class='row align-items-center mb-3'>
                                         <div class='col-7'>
-                                             <label for="" class="form-label mb-0">Expire server cache after n seconds<br>(set to 0 to use source setting)</label>
+                                             <label for="" class="form-label mb-0">Expire server cache after n seconds<br><span class="form-text">(set to 0 to use source setting)</span></label>
                                         </div>
                                         <div class='col-4'>
                                              <input type="number" class="form-control" id="expire-server-cache-after-n-seconds" placeholder="Enter seconds" min="0">
@@ -119,7 +133,7 @@
                                    </div>
                                    <div class='row align-items-center mb-3'>
                                         <div class='col-7'>
-                                             <label for="" class="form-label mb-0">Expire client cache after n seconds<br>(set to 0 to use source setting)</label>
+                                             <label for="" class="form-label mb-0">Expire client cache after n seconds<br><span class="form-text">(set to 0 to use source setting)</span></label>
                                         </div>
                                         <div class='col-4'>
                                              <input type="number" class="form-control" id="expire-client-cache-after-n-seconds" placeholder="Enter seconds" min="0">

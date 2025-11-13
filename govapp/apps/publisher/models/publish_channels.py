@@ -16,6 +16,7 @@ from django.utils import timezone
 import httpx
 import reversion
 from django.template import Template, Context
+from django.core.validators import MinValueValidator
 from datetime import datetime
 
 # Local
@@ -307,8 +308,21 @@ class GeoServerPublishChannel(mixins.RevisionedMixin):
     store_type = models.IntegerField(choices=StoreType.choices, default=StoreType.GEOPACKAGE)
     # Cached layer
     create_cached_layer = models.BooleanField(default=True, blank=True)
-    expire_server_cache_after_n_seconds = models.IntegerField(default=0, null=False, blank=False)  # meaningfull only if create_cached_layer is True
-    expire_client_cache_after_n_seconds = models.IntegerField(default=0, null=False, blank=False)  # meaningfull only if create_cached_layer is True
+    expire_server_cache_after_n_seconds = models.IntegerField(default=300, null=False, blank=False)  # meaningfull only if create_cached_layer is True
+    expire_client_cache_after_n_seconds = models.IntegerField(default=60, null=False, blank=False)  # meaningfull only if create_cached_layer is True
+    # GeoPackage Memory Map Size (MB)
+    gpkg_memory_map_size = models.IntegerField(
+        verbose_name="GeoPackage Memory Map Size (MB)",
+        null=True,
+        blank=True,
+        help_text=(
+            "Optional. The memory map size in Megabytes (MB) for this GeoPackage data store. "
+            "Leave blank to use the GeoServer default."
+        ),
+        validators=[
+            MinValueValidator(0)
+        ]
+    )
 
     objects = GeoServerPublishChannelManager()
 
@@ -441,16 +455,6 @@ class GeoServerPublishChannel(mixins.RevisionedMixin):
                 new_sld=symbology.sld,
                 use_raw=symbology.use_raw
             )
-            # if style_uploaded:
-            #     # geoserver.set_style_to_layer(
-            #     #     self.publish_entry.catalogue_entry.name,
-            #     #     self.publish_entry.catalogue_entry.symbology.name
-            #     # )
-            #     geoserver.set_default_style_to_layer(
-            #         self.publish_entry.catalogue_entry.symbology.name,
-            #         self.workspace.name,
-            #         self.publish_entry.catalogue_entry.name
-            #     )
         else:
             log.info(f'CatalogueEntry: [{self.publish_entry.catalogue_entry}] does not have Symbology.')
 
@@ -485,6 +489,7 @@ class GeoServerPublishChannel(mixins.RevisionedMixin):
                 workspace=self.workspace.name,
                 layer=self.publish_entry.catalogue_entry.metadata.name,
                 filepath=geopackage['full_filepath'],
+                memory_map_size=self.gpkg_memory_map_size
             )
         elif self.store_type == StoreType.GEOTIFF:
             workspace_name = self.workspace.name

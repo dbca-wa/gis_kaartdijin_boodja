@@ -6,6 +6,7 @@ import json
 import logging
 import pathlib
 import requests
+import time
 from django.template import loader
 
 # Third-Party
@@ -18,6 +19,7 @@ from django.template.loader import render_to_string
 
 from govapp import settings
 from govapp.common.utils import handle_http_exceptions
+import xml.etree.ElementTree as ET # Import the XML parser
 
 # Logging
 log = logging.getLogger(__name__)
@@ -136,6 +138,72 @@ class GeoServer:
                 if not chunk:
                     break
                 yield chunk
+    
+    def _update_gpkg_datastore_params(
+        self,
+        workspace: str,
+        store_name: str,
+        params_to_update: dict
+    ) -> None:
+        """
+        Updates specific connection parameters for an existing GeoPackage datastore
+        """
+        if not params_to_update:
+            log.info("No datastore parameters to update.")
+            return
+
+        log.info(f"Updating datastore [{store_name}] with parameters: [{params_to_update}]")
+        datastore_url = f"{self.service_url}/rest/workspaces/{workspace}/datastores/{store_name}.json"
+
+        try:
+            with requests.Session() as session:
+                session.auth = (self.username, self.password)
+                headers = {'Content-type': 'application/json', 'Accept': 'application/json'}
+
+                # Step 1: GET the current datastore configuration
+                log.info("Fetching current datastore configuration...")
+                get_response = session.get(datastore_url, headers=headers)
+                get_response.raise_for_status()
+                datastore_data = get_response.json()
+                log.debug(f"Retrieved datastore configuration:\n{json.dumps(datastore_data, indent=2)}")
+
+                # Step 2: Modify the connection parameters in the correct structure
+                log.info("Modifying connection parameters...")
+                connection_params = datastore_data.setdefault("dataStore", {}).setdefault("connectionParameters", {})
+                entry_list = connection_params.setdefault("entry", [])
+
+                # For each parameter we want to update...
+                for key_to_update, value_to_update in params_to_update.items():
+                    found_and_updated = False
+                    # ...iterate through the existing entries...
+                    for entry_item in entry_list:
+                        # ...and if we find a matching key...
+                        if entry_item.get("@key") == key_to_update:
+                            # ...update its value and mark it as found.
+                            entry_item["$"] = str(value_to_update)
+                            found_and_updated = True
+                            break # Move to the next parameter to update
+                    
+                    # If after checking all entries, we didn't find the key...
+                    if not found_and_updated:
+                        # ...it means we need to add a new entry to the list.
+                        log.info(f"Key '{key_to_update}' not found, adding it as a new entry.")
+                        entry_list.append({"@key": key_to_update, "$": str(value_to_update)})
+
+                log.debug(f"Sending updated datastore configuration:\n{json.dumps(datastore_data, indent=2)}")
+
+                # Step 3: PUT the updated configuration back to the server
+                log.info("Sending updated configuration to GeoServer...")
+                put_response = session.put(datastore_url, json=datastore_data, headers=headers)
+                put_response.raise_for_status()
+                log.info(f"Successfully updated datastore '{store_name}'.")
+
+        except requests.exceptions.HTTPError as e:
+            log.error(f"Failed to update datastore '{store_name}'. Status: {e.response.status_code}, Response: {e.response.text}")
+            raise
+        except (KeyError, TypeError) as e:
+            log.error(f"Failed to parse datastore configuration for '{store_name}'. Structure might be unexpected. Details: {e}")
+            raise
 
     @handle_http_exceptions(log)
     def upload_geopackage(
@@ -143,7 +211,8 @@ class GeoServer:
         workspace: str,
         layer: str,
         filepath: pathlib.Path,
-        chunk_size: Optional[int] = 1024 * 1024  # 1MB chunks by default
+        chunk_size: Optional[int] = 1024 * 1024,  # 1MB chunks by default
+        memory_map_size: Optional[int] = None,
     ) -> None:
         """Uploads a Geopackage file to the GeoServer.
 
@@ -170,7 +239,13 @@ class GeoServer:
             'filename': filepath.name,
             'update': 'overwrite',
             'configure': 'all'
+            # 'configure': 'none'
         }
+
+        # Add the memory map size to the query parameters ONLY if it's provided.
+        # if memory_map_size is not None:
+        #     # The key for the query parameter is 'mmap'.
+        #     params['mmap'] = str(memory_map_size)
 
         # Log file size for monitoring
         file_size = filepath.stat().st_size
@@ -192,9 +267,61 @@ class GeoServer:
                 log.info(f"GeoServer response: '{response.status_code}: {response.text}'")
                 response.raise_for_status()
 
+                # --- START: NEW ASYNCHRONOUS TASK HANDLING ---
+                if response.status_code == 202:
+                    status_url = response.headers.get('Location')
+                    if status_url:
+                        log.info(f"GeoServer is processing the upload asynchronously. Polling status at: {status_url}")
+                        
+                        # Poll the status URL until the task is complete
+                        max_wait_seconds = 180 # Wait for a maximum of 3 minutes
+                        start_time = time.time()
+                        while time.time() - start_time < max_wait_seconds:
+                            try:
+                                status_response = session.get(status_url, auth=(self.username, self.password))
+                                status_response.raise_for_status()
+                                status_data = status_response.json()
+                                task_status = status_data.get('task', {}).get('state', 'PENDING').upper()
+
+                                if task_status == 'FINISHED':
+                                    log.info("GeoServer asynchronous processing finished successfully.")
+                                    return # The task is complete
+                                elif task_status in ['RUNNING', 'PENDING']:
+                                    log.info(f"Task status: {task_status}. Waiting...")
+                                    time.sleep(5) # Wait 5 seconds before polling again
+                                else: # FAILED, ABORTED
+                                    error_message = status_data.get('task', {}).get('error', {}).get('message', 'Unknown error')
+                                    log.error(f"GeoServer task failed with status '{task_status}': {error_message}")
+                                    raise RuntimeError(f"GeoServer task failed: {error_message}")
+
+                            except requests.exceptions.RequestException as e:
+                                log.error(f"Error polling task status: {e}")
+                                time.sleep(5)
+                        
+                        # If the loop finishes without returning, it timed out
+                        raise RuntimeError("GeoServer task timed out after waiting for 3 minutes.")
+                    else:
+                        log.warning("GeoServer returned 202 but no Location header. Waiting a fixed time.")
+                        time.sleep(5) # Fallback delay
+                        return
+                # --- END: NEW ASYNCHRONOUS TASK HANDLING ---
+
             except requests.exceptions.RequestException as e:
                 log.error(f'Upload failed: [{str(e)}]')
                 raise
+
+            # --- START: DATATORE CONFIGURATION UPDATE STEP ---
+            # After the file upload (and async task) is successful,
+            # explicitly update the datastore's connection parameters.
+            if memory_map_size is not None:
+                try:
+                    # The connection parameter key for memory map size is "memory map size"
+                    params_to_update = {"memory map size": str(memory_map_size)}
+                    self._update_gpkg_datastore_params(workspace, layer, params_to_update)
+                except Exception as e:
+                    # Log a warning but don't fail the entire upload if only the config update fails
+                    log.warning(f"File was uploaded successfully, but failed to update memory map size for store [{layer}]. Please check manually. Error: {e}")
+            # --- END: DATATORE CONFIGURATION UPDATE STEP ---
 
     @handle_http_exceptions(log)
     def upload_tif(
@@ -204,54 +331,86 @@ class GeoServer:
         filepath: pathlib.Path,
         chunk_size: Optional[int] = 1024 * 1024  # 1MB chunks by default
     ) -> None:
-        """Uploads a Geopackage file to the GeoServer.
+        """Uploads a GeoTIFF file. It forcefully attempts to clean up any pre-existing 
+        resources (layer and store) before uploading, ignoring 404 errors on delete."""
+        log.info(f"Preparing to upload GeoTiff '{filepath.name}' as resource '{layer}' in workspace '{workspace}'")
 
-        Args:
-            workspace (str): Workspace to upload files to.
-            layer (str): Name of the layer to upload GeoPackage for.
-            filepath (pathlib.Path): Path to the Geopackage file to upload.
-        """
-        # Log
-        log.info(f"Uploading GeoTiff '{filepath}' to GeoServer")
+        # --- START: FORCEFUL PRE-FLIGHT CLEANUP ---
+        # This approach attempts to delete both layer and store, ignoring 'Not Found' errors.
+        # This is more robust against inconsistencies where GET might fail but the resource exists.
+        try:
+            with requests.Session() as session:
+                session.auth = (self.username, self.password)
 
-        # Construct URL
-        url = f"{self.service_url}/rest/workspaces/{workspace}/coveragestores/{layer}/file.geotiff"
-        
-        headers = {
-            'Content-Type': 'image/tiff',
-            'Transfer-Encoding': 'chunked',
-            'Connection': 'keep-alive'
-        }
-        
-        params = {
-            'filename': layer,
-            'update': 'overwrite',
-            'configure': 'all',
-            # 'coverageName': layer
-        }
+                # Define URLs for both the layer and the store
+                # The layer name in the URL must be prefixed with the workspace
+                layer_delete_url = f"{self.service_url}/rest/layers/{workspace}:{layer}"
+                store_delete_url = f"{self.service_url}/rest/workspaces/{workspace}/coveragestores/{layer}?recurse=true"
 
+                # Step 1: Attempt to delete the LAYER first.
+                # An orphaned layer can prevent a store with the same name from being created.
+                log.info(f"Attempting to delete layer (if it exists): {layer_delete_url}")
+                layer_del_response = session.delete(layer_delete_url, timeout=(15, 120))
+                if layer_del_response.status_code == 200:
+                    log.info(f"Successfully deleted layer '{layer}'.")
+                elif layer_del_response.status_code == 404:
+                    log.info(f"Layer '{layer}' did not exist; no action needed.")
+                else:
+                    # If deletion fails for any other reason, raise an error.
+                    layer_del_response.raise_for_status()
+
+                # Step 2: Attempt to delete the COVERAGE STORE.
+                # Using recurse=true is a good practice, though the layer might be gone already.
+                log.info(f"Attempting to delete coverage store (if it exists): {store_delete_url}")
+                store_del_response = session.delete(store_delete_url, timeout=(15, 120))
+                if store_del_response.status_code == 200:
+                    log.info(f"Successfully deleted coverage store '{layer}'.")
+                elif store_del_response.status_code == 404:
+                    log.info(f"Coverage store '{layer}' did not exist; no action needed.")
+                else:
+                    store_del_response.raise_for_status()
+                
+                log.info(f"Pre-flight cleanup complete for resource '{layer}'.")
+
+        except requests.exceptions.RequestException as e:
+            log.error(f"An error occurred during pre-flight cleanup for resource '{layer}': {e}")
+            raise
+        # --- END: FORCEFUL PRE-FLIGHT CLEANUP ---
+
+
+        # --- UPLOAD LOGIC (This part remains the same) ---
+        upload_url = f"{self.service_url}/rest/workspaces/{workspace}/coveragestores/{layer}/file.geotiff"
+        headers = {'Content-Type': 'image/tiff'}
+        params = {'filename': layer, 'configure': 'all'}
         file_size = filepath.stat().st_size
-        log.info(f"File size: {file_size / (1024*1024):.2f} MB")
+        log.info(f"File size: {file_size / (1024*1024):.2f} MB. Starting streaming upload...")
 
-        with requests.Session() as session:
-            # Perform streaming upload
-            try:
+        # The rest of the function (the PUT request) remains identical to your current version.
+        # ... (your existing try/except block for the PUT request) ...
+        try:
+            with requests.Session() as session:
                 response = session.put(
-                    url=url,
+                    url=upload_url,
                     data=self._stream_file(filepath, chunk_size),
                     params=params,
                     headers=headers,
                     auth=(self.username, self.password),
-                    timeout=3000.0,
+                    timeout=(15, 3000.0),
                     stream=True
                 )
-
-                log.info(f"GeoServer response: '{response.status_code}: {response.text}'")
+                log.info(f"GeoServer response: [{response.status_code}]: [{response.text}]")
                 response.raise_for_status()
+                log.info(f"Successfully uploaded GeoTIFF and created resource '{layer}'.")
+        except requests.exceptions.HTTPError as e:
+            log.error(
+                f"HTTP Error during upload for store '{layer}'. "
+                f"Status Code: {e.response.status_code}. Response: {e.response.text}"
+            )
+            raise
+        except requests.exceptions.RequestException as e:
+            log.error(f"An unexpected error occurred during upload for store '{layer}'. Details: {e}")
+            raise
 
-            except requests.exceptions.RequestException as e:
-                log.error(f'Upload failed: [{str(e)}]')
-                raise
 
     @handle_http_exceptions(log)
     def create_layer_from_coveragestore(self, workspace: str, layer: str) -> None:
@@ -620,35 +779,71 @@ class GeoServer:
         workspace_name: str,
         layer_name: str,
     ) -> None:
-        """Sets the default style for a layer in GeoServer.
-
-        Args:
-            workspace (str): Workspace to upload files to.
-            layer (str): Name of the layer to set default style for.
-            name (str): Name of the style.
         """
+        Sets the default style for a layer in GeoServer by fetching,
+        modifying, and putting back the layer configuration.
+        """
+        log.info(f"Setting default style '{style_name}' for layer '{layer_name}'...")
+
+        wait_seconds = 5
+        log.info(f"Waiting for {wait_seconds} seconds before fetching layer details...")
+        time.sleep(wait_seconds)
+
+        # --- Step 1: GET the current layer configuration ---
+        get_url = f"{self.service_url}/rest/layers/{workspace_name}:{layer_name}.xml"
+        
         try:
-            # Log
-            log.info(f"Setting style: [{style_name}] as default to the layer: [{layer_name}] in the GeoServer: [{self.service_url}]...")
+            log.info(f"Fetching current layer details from: {get_url}")
+            get_response = httpx.get(
+                url=get_url,
+                auth=(self.username, self.password),
+                timeout=30.0
+            )
+            get_response.raise_for_status()
 
-            # Set Default Layer Style
-            url = f"{self.service_url}/rest/workspaces/{workspace_name}/layers/{layer_name}.xml"
+            # --- Step 2: Parse the XML and modify the defaultStyle ---
+            # Parse the XML content from the response
+            tree = ET.fromstring(get_response.content)
 
-            # Perform Request
-            # This only works with XML (GeoServer is broken)
-            response = httpx.put(
-                url=url,
-                content=f"<layer><defaultStyle><name>{style_name}</name></defaultStyle></layer>",
+            # Find the <defaultStyle> element. If it doesn't exist, create it.
+            default_style_element = tree.find('defaultStyle')
+            if default_style_element is None:
+                default_style_element = ET.SubElement(tree, 'defaultStyle')
+
+            # Find the <name> element within <defaultStyle>. If it doesn't exist, create it.
+            name_element = default_style_element.find('name')
+            if name_element is None:
+                name_element = ET.SubElement(default_style_element, 'name')
+
+            # Set the new style name
+            name_element.text = style_name
+            
+            # Convert the modified XML tree back to a string
+            updated_xml_content = ET.tostring(tree, encoding='unicode')
+
+            # --- Step 3: PUT the modified full layer configuration back ---
+            put_url = f"{self.service_url}/rest/layers/{workspace_name}:{layer_name}.xml" # Can also use the same URL
+            log.info(f"Putting updated layer configuration to: {put_url}")
+            log.debug(f"Updated XML Payload: {updated_xml_content}") # For debugging
+
+            put_response = httpx.put(
+                url=put_url,
+                content=updated_xml_content,
                 headers={"Content-Type": "application/xml"},
                 auth=(self.username, self.password),
                 timeout=120.0
             )
+            put_response.raise_for_status()
+            log.info(f"Successfully set default style '{style_name}' for layer '{layer_name}'.")
 
-            # Log
-            log.info(f"GeoServer response: '{response.status_code}: {response.text}'")
-
-            # Check Response
-            response.raise_for_status()
+        except httpx.HTTPStatusError as e:
+            # Provide more context on HTTP errors
+            error_text = e.response.text
+            log.error(
+                f"HTTP error while setting default style for '{layer_name}': "
+                f"Status {e.response.status_code}, Response: {error_text}"
+            )
+            raise  # Re-raise the exception
         except Exception as e:
             log.error(f"Unable to set the default style: [{style_name}] to the GeoServer: [{self.service_url}]: {e}")
 
@@ -928,6 +1123,3 @@ def geoserverWithCustomCreds(url,username,password):
         username=username,
         password=password,
     )
-
-
-
