@@ -1,5 +1,5 @@
 # Add crons below
 # Copied from https://github.com/dbca-wa/boranga/blob/main/cron
-*/2 * * * * python /app/manage.py runcrons >> /app/logs/cronjob.log 2>&1
+*/1 * * * * python /app/manage.py runcrons >> /app/logs/cronjob.log 2>&1
 # 10 9 * * 0 python /app/manage.py appmonitor_check >> /app/logs/appmonitor_check.log 2>&1
 1 0 * * *  /bin/log_rotate.sh  >> /app/logs/log_rotate.log 2>&1

@@ -65,7 +65,10 @@ var kbpublish = {
         publish_table_date_format: "DD MMM YYYY HH:mm:ss",
         publish_email_notification_type:null,    // will be filled during initiation
         communication_type:null,    // will be filled during initiation
-        ftp_servers: []
+        ftp_servers: [],
+
+        expire_server_cache_after_n_seconds_default: null,
+        expire_client_cache_after_n_seconds_default: null
     },
     variable: {
         overlay_checkmark: $('<div class="overlay">' +
@@ -157,7 +160,7 @@ var kbpublish = {
             format: this.var.publish_date_format,
         });
         $('#publish-lastupdatedto').datepicker({  dateFormat: this.var.publish_date_format, 
-                format: this.var.publish_date_format,
+            format: this.var.publish_date_format,
         });
         $( "#publish-filter-btn" ).click(function() {
             kbpublish.get_publish();
@@ -264,10 +267,13 @@ var kbpublish = {
     },
     // A function to toggle the visibility of the memory map size field
     toggleMemoryMapField: function() {
+        console.log('toggleMemoryMapField called')
         const storeTypeSelect = $('#new-publish-store-type');
         const memoryMapRow = $('#gpkg-memory-map-size-row');
 
         const GEOPACKAGE_VALUE = '1'; // Check class StoreType
+
+        console.log('storeTypeSelect: ' + storeTypeSelect.val())
 
         if (storeTypeSelect.val() === GEOPACKAGE_VALUE) {
             memoryMapRow.slideDown(); // Show the field with a smooth animation
@@ -276,6 +282,9 @@ var kbpublish = {
         }
     },
     init_publish_item: function() {    
+        kbpublish.var.expire_server_cache_after_n_seconds_default = $('#expire_server_cache_after_n_seconds_default').val()
+        kbpublish.var.expire_client_cache_after_n_seconds_default = $('#expire_client_cache_after_n_seconds_default').val()
+
         $.ajax({
             url: kbpublish.var.ftp_server_url,
             type: 'GET',           
@@ -1830,8 +1839,8 @@ var kbpublish = {
 
             // Cached layer
             $('#new-publish-create-cached-layer').removeAttr('disabled').prop('checked', true);
-            $('#expire-server-cache-after-n-seconds').removeAttr('disabled').val(0);
-            $('#expire-client-cache-after-n-seconds').removeAttr('disabled').val(0);
+            $('#expire-server-cache-after-n-seconds').removeAttr('disabled').val(kbpublish.var.expire_server_cache_after_n_seconds_default);
+            $('#expire-client-cache-after-n-seconds').removeAttr('disabled').val(kbpublish.var.expire_client_cache_after_n_seconds_default);
         }
 
         // Remove success/error message
@@ -1873,8 +1882,8 @@ var kbpublish = {
             $('#new-publish-store-type').removeAttr('disabled').val(PUBLISH_STORE_TYPE_GEOTIFF);  
             $('#new-publish-active').removeAttr('disabled').prop('checked', true);
             $('#new-publish-create-cached-layer').removeAttr('disabled').prop('checked', true);
-            $('#expire-server-cache-after-n-seconds').removeAttr('disabled').val(0);
-            $('#expire-client-cache-after-n-seconds').removeAttr('disabled').val(0);
+            $('#expire-server-cache-after-n-seconds').removeAttr('disabled').val(kbpublish.var.expire_server_cache_after_n_seconds_default);
+            $('#expire-client-cache-after-n-seconds').removeAttr('disabled').val(kbpublish.var.expire_client_cache_after_n_seconds_default);
             $('#new-publish-gpkg-memory-map-size').removeAttr('disabled').val('');
         }
         // Remove success/error message
@@ -1882,6 +1891,7 @@ var kbpublish = {
         $('#new-publish-new-geoserver-success').html('').hide();
 
         kbpublish.toggleOtherOptions();
+        kbpublish.toggleMemoryMapField();
 
         // Show modal
         $('#PublishGeoserverCreateOrUpdateModal').modal('show');

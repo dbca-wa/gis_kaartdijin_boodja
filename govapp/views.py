@@ -254,6 +254,9 @@ class PublishView(base.TemplateView):
         context['geoserver_pools'] = geoserver_pools
         context['geoserver_pool_list_json'] = json.dumps(geoserver_pool_list)
         context['store_types'] = store_types
+
+        context['expire_server_cache_after_n_seconds_default'] = settings.EXPIRE_SERVER_CACHE_AFTER_N_SECONDS_DEFAULT
+        context['expire_client_cache_after_n_seconds_default'] = settings.EXPIRE_CLIENT_CACHE_AFTER_N_SECONDS_DEFAULT
     
         # Render Template and Return
         return shortcuts.render(request, self.template_name, context)
@@ -599,9 +602,12 @@ class LayerSubscriptionsView(base.TemplateView):
         context['enabled_js'] = "true" if subscription_obj.enabled else "false"
         context['is_assigned'] = is_assigned
         context['ssl_modes'] = catalogue_layer_subscription_models.LayerSubscription.SSL_MODE_CHOICES
+
+        context['expire_server_cache_after_n_seconds_default'] = settings.EXPIRE_SERVER_CACHE_AFTER_N_SECONDS_DEFAULT
+        context['expire_client_cache_after_n_seconds_default'] = settings.EXPIRE_CLIENT_CACHE_AFTER_N_SECONDS_DEFAULT
         
         # Render Template and Return
-        return shortcuts.render(request, self.template_name, context)        
+        return shortcuts.render(request, self.template_name, context)
 
 
 class GeoServerQueue(base.TemplateView):

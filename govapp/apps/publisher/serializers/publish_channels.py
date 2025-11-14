@@ -166,9 +166,6 @@ class GeoServerLayerHealthcheckSerializer(serializers.ModelSerializer):
 class GeoServerPublishChannelCreateSerializer(serializers.ModelSerializer):
     """GeoServer Publish Channel Model Create Serializer."""
 
-    # expire_server_cache_after_n_seconds = serializers.IntegerField(required=False, allow_null=True)
-    # expire_client_cache_after_n_seconds = serializers.IntegerField(required=False, allow_null=True)
-
     class Meta:
         """GeoServer Publish Channel Model Create Serializer Metadata."""
         model = models.publish_channels.GeoServerPublishChannel
