@@ -785,7 +785,7 @@ class GeoServer:
         """
         log.info(f"Setting default style '{style_name}' for layer '{layer_name}'...")
 
-        wait_seconds = 5
+        wait_seconds = settings.WAIT_FOR_N_SECONDS_BEFORE_FETCHING_LAYER_DETAILS
         log.info(f"Waiting for {wait_seconds} seconds before fetching layer details...")
         time.sleep(wait_seconds)
 
