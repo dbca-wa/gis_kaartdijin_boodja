@@ -10,6 +10,7 @@ from django.utils.html import format_html
 # Local
 from govapp.apps.catalogue.admin import construct_catalogue_entry_link
 from govapp.apps.publisher import models
+from govapp.apps.publisher.models.geoserver_pools import GeoserverClusterPool
 from govapp.apps.publisher.models.geoserver_queues import GeoServerQueueStatus
 from govapp.apps.publisher.models.geoserver_roles_groups import GeoServerGroupUser, GeoServerRoleUser
 from govapp.apps.publisher.models.notifications import EmailNotification
@@ -55,6 +56,17 @@ class PublishEntryAdmin(reversion.admin.VersionAdmin):
     get_status.short_description = 'Status'
 
 
+class GeoserverClusterPoolInline(admin.TabularInline):
+    """
+    Defines the inline admin options for GeoserverClusterPool.
+    This will be displayed within the GeoServerPool admin page.
+    """
+    model = GeoserverClusterPool
+    fields = ('server_url', 'username', 'password', 'enabled')
+    extra = 0
+    verbose_name_plural = "Cluster Nodes"
+
+
 class GeoServerPoolAdmin(reversion.admin.VersionAdmin):
     """Custom Django Admin for GeoServer Pool."""
     # This provides a better interface for `ManyToMany` fields
@@ -64,6 +76,7 @@ class GeoServerPoolAdmin(reversion.admin.VersionAdmin):
     list_filter = ('enabled',)
     list_display_links = ('id', 'name',)
     ordering = ('id', 'name')
+    inlines = [GeoserverClusterPoolInline,]
 
     def num_of_layers(self, obj):
         return f'{obj.total_active_layers} ({obj.total_layers})'
