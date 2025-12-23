@@ -5,6 +5,7 @@
 import os
 import json
 import logging
+import requests
 from django import http
 from django import shortcuts
 from django.views.generic import base
@@ -15,6 +16,10 @@ from rest_framework.decorators import permission_classes
 from owslib.wms import WebMapService
 from django.contrib.auth.mixins import UserPassesTestMixin
 from django.contrib.auth.decorators import login_required, user_passes_test
+from requests.auth import HTTPBasicAuth
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
 
 # Internal
 from govapp import settings
@@ -754,3 +759,91 @@ def get_logs(request):
             'log_lines': last_x_lines,
             'current_position': current_position,
         })
+
+
+class PurgeTileCacheAPIView(APIView):
+    """
+    API View to purge the tile cache for a specific Publish Entry.
+    This will send a purge request to every individual GeoServer instance
+    (represented by GeoServerPool models) associated with the entry.
+    """
+    def post(self, request, publish_entry_pk):
+        logger.info(f"Received request to purge tile cache for PublishEntry pk={publish_entry_pk}.")
+
+        # 1. Get the PublishEntry object
+        try:
+            publish_entry = publish_entries_models.PublishEntry.objects.get(pk=publish_entry_pk)
+        except publish_entries_models.PublishEntry.DoesNotExist:
+            logger.warning(f"PublishEntry with pk={publish_entry_pk} not found.")
+            return Response({"error": "Publish Entry not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        # 2. Find ALL associated active GeoServer Publish Channels
+        try:
+            # Use select_related to efficiently fetch the related GeoServerPool objects
+            # to avoid extra database queries inside the loop.
+            active_channels = GeoServerPublishChannel.objects.filter(
+                publish_entry=publish_entry,
+                active=True
+            ).select_related('geoserver_pool')
+
+            if not active_channels.exists():
+                logger.error(f"No active GeoServer publish channels found for PublishEntry pk={publish_entry_pk}.")
+                return Response({"error": "No active GeoServer publish channels found for this entry."}, status=status.HTTP_400_BAD_REQUEST)
+
+            purge_results = []
+            overall_success = True
+            layer_name_for_geoserver = publish_entry.catalogue_entry.name
+            
+            logger.info(f"Found {len(active_channels)} active channels for layer '{layer_name_for_geoserver}'. Starting purge process.")
+
+            # 3. Loop through EACH channel to get its associated GeoServer instance (GeoServerPool)
+            for channel in active_channels:
+                geoserver_instance = channel.geoserver_pool
+
+                if not geoserver_instance:
+                    logger.warning(f"PublishChannel pk={channel.pk} is not associated with a GeoServer instance. Skipping.")
+                    continue
+                
+                if not geoserver_instance.enabled:
+                    logger.warning(f"GeoServer instance '{geoserver_instance.name}' (pk={geoserver_instance.pk}) is disabled. Skipping.")
+                    continue
+
+                logger.info(f"Processing GeoServer instance: '{geoserver_instance.name}'")
+
+                # 4. Send the purge request using the GeoServerPool's own URL and credentials
+                try:
+                    url = f"{geoserver_instance.url.rstrip('/')}/geoserver/gwc/rest/masstruncate"
+                    auth = HTTPBasicAuth(geoserver_instance.username, geoserver_instance.password)
+                    headers = {'Content-type': 'text/xml'}
+                    data = f"<truncateLayer><layerName>{layer_name_for_geoserver}</layerName></truncateLayer>"
+
+                    logger.info(f"Sending purge request for layer '{layer_name_for_geoserver}' to: {url}")
+                    response = requests.post(url=url, auth=auth, data=data, headers=headers, timeout=30)
+
+                    if response.status_code == 200:
+                        logger.info(f"Successfully purged cache on GeoServer: {geoserver_instance.name}")
+                        purge_results.append({"geoserver": geoserver_instance.name, "status": "Success"})
+                    else:
+                        overall_success = False
+                        logger.error(f"Failed to purge cache on GeoServer: {geoserver_instance.name}. Status: {response.status_code}, Response: {response.text}")
+                        purge_results.append({
+                            "geoserver": geoserver_instance.name, "status": "Failed",
+                            "statusCode": response.status_code, "error": response.text
+                        })
+
+                except requests.exceptions.RequestException as e:
+                    overall_success = False
+                    logger.error(f"A network error occurred while contacting GeoServer {geoserver_instance.name}: {e}", exc_info=True)
+                    purge_results.append({"geoserver": geoserver_instance.name, "status": "Failed", "error": str(e)})
+
+        except Exception as e:
+            logger.error(f"An unexpected error occurred for PublishEntry pk={publish_entry_pk}: {e}", exc_info=True)
+            return Response({"error": f"An unexpected error occurred: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+        # 5. Return the overall result
+        if overall_success:
+            logger.info(f"Successfully completed purge process for PublishEntry pk={publish_entry_pk}.")
+            return Response({"message": "Tile cache purged successfully.", "details": purge_results}, status=status.HTTP_200_OK)
+        else:
+            logger.error(f"Purge process failed for one or more GeoServers for PublishEntry pk={publish_entry_pk}.")
+            return Response({"error": "One or more GeoServers failed to purge.", "details": purge_results}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

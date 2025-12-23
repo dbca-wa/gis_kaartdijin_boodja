@@ -100,6 +100,7 @@ urlpatterns = [
 
     urls.path('api/logcontents/', views.get_logs, name='get_logs'),
     urls.path('logfile/', views.LogFileView.as_view(), name='logfile'),
+    urls.path('api/publish_entries/<int:publish_entry_pk>/purge_cache/', views.PurgeTileCacheAPIView.as_view(), name='purge-publish-entry-cache'),
 ]
 
 # DBCA Template URLs
