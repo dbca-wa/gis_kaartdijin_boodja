@@ -784,7 +784,7 @@ class PurgeTileCacheAPIView(APIView):
             active_channels = GeoServerPublishChannel.objects.filter(
                 publish_entry=publish_entry,
                 active=True
-            ).select_related('geoserver_pool')
+            ).select_related('geoserver_pool', 'workspace')
 
             if not active_channels.exists():
                 logger.error(f"No active GeoServer publish channels found for PublishEntry pk={publish_entry_pk}.")
@@ -808,14 +808,18 @@ class PurgeTileCacheAPIView(APIView):
                     logger.warning(f"GeoServer instance '{geoserver_instance.name}' (pk={geoserver_instance.pk}) is disabled. Skipping.")
                     continue
 
-                logger.info(f"Processing GeoServer instance: '{geoserver_instance.name}'")
+                workspace_name = channel.workspace.name
+                full_layer_name = f"{workspace_name}:{layer_name_for_geoserver}"
+
+                logger.info(f"Processing GeoServer instance: '{geoserver_instance.name}' for full layer name: '{full_layer_name}'.")
 
                 # 4. Send the purge request using the GeoServerPool's own URL and credentials
                 try:
-                    url = f"{geoserver_instance.url.rstrip('/')}/geoserver/gwc/rest/masstruncate"
+                    # url = f"{geoserver_instance.url.rstrip('/')}/geoserver/gwc/rest/masstruncate"
+                    url = f"{geoserver_instance.url}/gwc/rest/masstruncate"
                     auth = HTTPBasicAuth(geoserver_instance.username, geoserver_instance.password)
                     headers = {'Content-type': 'text/xml'}
-                    data = f"<truncateLayer><layerName>{layer_name_for_geoserver}</layerName></truncateLayer>"
+                    data = f"<truncateLayer><layerName>{full_layer_name}</layerName></truncateLayer>"
 
                     logger.info(f"Sending purge request for layer '{layer_name_for_geoserver}' to: {url}")
                     response = requests.post(url=url, auth=auth, data=data, headers=headers, timeout=30)
