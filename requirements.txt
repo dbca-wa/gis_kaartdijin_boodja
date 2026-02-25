@@ -37,7 +37,7 @@ oauthlib==3.2.2
 sentry-sdk==2.19.0
 requests>=2.32.3
 anyio>=4.4.0
-GDAL==3.11.3
+GDAL==3.11.4
 setuptools==80.9.0
 # jaraco.context vulnerability is baked into setuptools and cannot be fixed independently.
 # Waiting for setuptools to release a patch.
