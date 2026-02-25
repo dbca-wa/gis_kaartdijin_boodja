@@ -31,11 +31,13 @@ git+https://github.com/dbca-wa/appmonitor_client.git#egg=appmonitor_client
 cryptography>=42.0.7
 pillow==10.3.0
 # pyjwt==2.8.0
-urllib3~=2.6.0
-wheel==0.42.0
+urllib3~=2.6
+wheel>=0.45.0
 oauthlib==3.2.2
 sentry-sdk==2.19.0
 requests>=2.32.3
 anyio>=4.4.0
 GDAL==3.11.3
 setuptools==80.9.0
+# jaraco.context vulnerability is baked into setuptools and cannot be fixed independently.
+# Waiting for setuptools to release a patch.
