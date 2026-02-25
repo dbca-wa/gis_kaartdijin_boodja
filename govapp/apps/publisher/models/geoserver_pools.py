@@ -717,3 +717,28 @@ class GeoServerPool(mixins.RevisionedMixin):
 
         for group_in_kb in groups_in_kb:
             self.sync_relations_groups_roles(group_in_kb)
+
+
+class GeoserverClusterPool(models.Model):
+    """
+    Model representing a server node within a GeoServer pool.
+    This implementation follows the initial specifications.
+    """
+
+    geoserver_pool = models.ForeignKey(
+        'GeoServerPool',
+        on_delete=models.CASCADE,
+        related_name='cluster_nodes'
+    )
+
+    server_url = models.CharField(max_length=500)
+    username = models.CharField(max_length=200)
+    password = models.CharField(max_length=200)
+    enabled = models.BooleanField(default=True)
+
+    def __str__(self):
+        return f"Node for {self.geoserver_pool.name} at {self.server_url}"
+
+    class Meta:
+        verbose_name = "GeoServer Cluster Pool Node"
+        verbose_name_plural = "GeoServer Cluster Pool Nodes"

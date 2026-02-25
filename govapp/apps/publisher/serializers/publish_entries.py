@@ -7,6 +7,7 @@ from rest_framework import serializers
 # Local
 from govapp.apps.publisher import models
 from govapp.apps.accounts import serializers as accounts_serializers
+from govapp.apps.publisher.models.publish_channels import GeoServerPublishChannel
 
 class PublishEntrySerializer(serializers.ModelSerializer):
     """Publish Entry Model Serializer.""" 
@@ -24,6 +25,7 @@ class PublishEntrySerializer(serializers.ModelSerializer):
     num_of_geoserver_publish_channels_active = serializers.SerializerMethodField()
     num_of_geoserver_publish_channels_inactive = serializers.SerializerMethodField()
     num_of_cddp_publish_channels = serializers.SerializerMethodField()
+    num_of_cache_enabled_channels = serializers.SerializerMethodField()
 
     class Meta:
         """Publish Entry Model Serializer Metadata."""
@@ -52,7 +54,11 @@ class PublishEntrySerializer(serializers.ModelSerializer):
             "num_of_geoserver_publish_channels_active",
             "num_of_geoserver_publish_channels_inactive",
             "num_of_cddp_publish_channels",
+            "num_of_cache_enabled_channels",
         )
+
+    def get_num_of_cache_enabled_channels(self, obj):
+        return obj.num_of_cache_enabled_channels
 
     def get_email(self, obj):
         return obj.email

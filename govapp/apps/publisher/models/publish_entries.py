@@ -107,6 +107,10 @@ class PublishEntry(mixins.RevisionedMixin):
         return self.catalogue_entry.name
 
     @property
+    def num_of_cache_enabled_channels(self):
+        return self.geoserver_channels.filter(publish_entry=self, active=True, create_cached_layer=True).count()
+
+    @property
     def num_of_geoserver_publish_channels_active(self):
         return self.geoserver_channels.filter(active=True).count() if hasattr(self, 'geoserver_channels') else 0
 
