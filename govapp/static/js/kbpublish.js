@@ -2532,14 +2532,14 @@ var kbpublish = {
     },
     purge_cache_for_entry: function(publishEntryId, publishEntryName, button) {
         const confirmation = confirm(
-            `Are you sure you want to purge the tile cache for '${publishEntryName}' (PE${publishEntryId})?\n\nThis will purge the cache on ALL associated GeoServer instances.`
+            `Are you sure you want to purge the tile cache for '${publishEntryName}' (PE${publishEntryId})?\n\nThe purge job will be added to the queue and processed shortly.`
         );
         if (!confirmation) {
             return;
         }
 
         button.prop('disabled', true);
-        button.html('<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Purging...');
+        button.html('<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Queuing...');
 
         const url = `/api/publish_entries/${publishEntryId}/purge_cache/`;
         const csrf_token = $("#csrfmiddlewaretoken").val();
@@ -2550,18 +2550,20 @@ var kbpublish = {
             headers: {'X-CSRFToken': csrf_token},
             contentType: 'application/json',
             success: function(response) {
-                console.log("Purge successful:", response);
+                console.log("Purge cache queued:", response);
                 button.removeClass('btn-warning').addClass('btn-success');
-                button.html('Success');
+                button.html('Queued!');
                 
                 setTimeout(function() {
-                    kbpublish.get_publish();
+                    button.prop('disabled', false);
+                    button.removeClass('btn-success').addClass('btn-warning');
+                    button.text('Purge Tile Cache');
                 }, 3000);
             },
             error: function(error) {
-                console.error("Error purging tile cache:", error.responseJSON);
+                console.error("Error queuing purge tile cache:", error.responseJSON);
                 const errorMessage = error.responseJSON?.error || 'An unknown error occurred.';
-                alert(`Failed to purge tile cache for '${publishEntryName}':\n${errorMessage}`);
+                alert(`Failed to queue purge tile cache for '${publishEntryName}':\n${errorMessage}`);
 
                 button.removeClass('btn-warning').addClass('btn-danger');
                 button.text('Error');
