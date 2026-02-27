@@ -262,6 +262,15 @@ class GeoServerQueueSerializer(serializers.ModelSerializer):
         fields = "__all__"
         
     def get_status(self, obj):
+        # Use different display labels for PURGE_CACHE queue type
+        if obj.queue_type == models.geoserver_queues.GeoServerQueueType.PURGE_CACHE:
+            status_label_map = {
+                models.geoserver_queues.GeoServerQueueStatus.READY: "READY",
+                models.geoserver_queues.GeoServerQueueStatus.ON_PUBLISHING: "PROCESSING",
+                models.geoserver_queues.GeoServerQueueStatus.PUBLISHED: "PURGED",
+                models.geoserver_queues.GeoServerQueueStatus.FAILED: "FAILED",
+            }
+            return status_label_map.get(obj.status, obj.status)
         for status in models.geoserver_queues.GeoServerQueueStatus:
             if status == obj.status:
                 return status.name

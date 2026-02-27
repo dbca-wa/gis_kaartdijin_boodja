@@ -36,7 +36,7 @@ var kbgeoserverweb = {
                 };
                 for(let i in response.results){
                     if(response.results[i].status == 'FAILED') response.results[i].success = false;
-                    else if(response.results[i].status == 'PUBLISHED') response.results[i].success = true;
+                    else if(response.results[i].status == 'PUBLISHED' || response.results[i].status == 'PURGED') response.results[i].success = true;
                     else response.results[i].success = null;
                     response.results[i].queue_type_label = queue_type_label[response.results[i].queue_type] || response.results[i].queue_type;
                 }
