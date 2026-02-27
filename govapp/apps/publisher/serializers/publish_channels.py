@@ -254,6 +254,7 @@ class GeoServerQueueSerializer(serializers.ModelSerializer):
     name = serializers.CharField(source='publish_entry.name')
     status = serializers.SerializerMethodField()
     submitter = serializers.SerializerMethodField()
+    queue_type = serializers.SerializerMethodField()
 
     class Meta:
         """GeoServer Queue Model Serializer Metadata."""
@@ -264,7 +265,13 @@ class GeoServerQueueSerializer(serializers.ModelSerializer):
         for status in models.geoserver_queues.GeoServerQueueStatus:
             if status == obj.status:
                 return status.name
-            
+
+    def get_queue_type(self, obj):
+        for queue_type in models.geoserver_queues.GeoServerQueueType:
+            if queue_type == obj.queue_type:
+                return queue_type.name
+        return None
+
     def get_submitter(self, obj):
         first_name = obj.submitter.first_name if hasattr(obj.submitter, 'first_name') else ""
         last_name = obj.submitter.last_name if hasattr(obj.submitter, 'last_name') else ""
