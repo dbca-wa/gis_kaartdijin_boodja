@@ -88,34 +88,45 @@ class GeoServerQueueExcutor:
         log.info(f"Start publishing for {queue_items.count()} geoserver queue items.")
 
         for queue_item in queue_items:
-            self._init_excuting(queue_item=queue_item)
+            try:
+                self._init_excuting(queue_item=queue_item)
 
-            if queue_item.queue_type == GeoServerQueueType.PURGE_CACHE:
-                self._purge_cache_for_queue_item(queue_item)
-            else:
-                for geoserver_publish_channel in queue_item.publish_entry.geoserver_channels.all():
-                    geoserver_pool = geoserver_publish_channel.geoserver_pool
+                if queue_item.queue_type == GeoServerQueueType.PURGE_CACHE:
+                    self._purge_cache_for_queue_item(queue_item)
+                else:
+                    for geoserver_publish_channel in queue_item.publish_entry.geoserver_channels.all():
+                        geoserver_pool = geoserver_publish_channel.geoserver_pool
 
-                    if not geoserver_pool:
-                        # No geoserver_pool configured
-                        self.result_status = GeoServerQueueStatus.FAILED
-                        self.result_success = False
-                        self._add_publishing_log(f"[{queue_item.publish_entry.name}] Publishing failed.  No geoserver_pool configured.")
-                        continue
+                        if not geoserver_pool:
+                            # No geoserver_pool configured
+                            self.result_status = GeoServerQueueStatus.FAILED
+                            self.result_success = False
+                            self._add_publishing_log(f"[{queue_item.publish_entry.name}] Publishing failed.  No geoserver_pool configured.")
+                            continue
 
-                    if not geoserver_pool.enabled:
-                        self.result_status = GeoServerQueueStatus.FAILED
-                        self.result_success = False
-                        self._add_publishing_log(f"[{queue_item.publish_entry.name} - {geoserver_pool.url}] Publishing failed.  Geoserver_pool is not enabled.")
-                        continue
+                        if not geoserver_pool.enabled:
+                            self.result_status = GeoServerQueueStatus.FAILED
+                            self.result_success = False
+                            self._add_publishing_log(f"[{queue_item.publish_entry.name} - {geoserver_pool.url}] Publishing failed.  Geoserver_pool is not enabled.")
+                            continue
 
-                    # Make sure all the workspace exist in the geoserver
-                    workspaces_in_kb = Workspace.objects.all()
-                    for workspace in workspaces_in_kb:
-                        geoserver_pool.create_workspace_if_not_exists(workspace.name)
-                    self._publish_to_a_geoserver(geoserver_publish_channel)
+                        # Make sure all the workspace exist in the geoserver
+                        workspaces_in_kb = Workspace.objects.all()
+                        for workspace in workspaces_in_kb:
+                            geoserver_pool.create_workspace_if_not_exists(workspace.name)
+                        self._publish_to_a_geoserver(geoserver_publish_channel)
 
-            self._update_result(queue_item=queue_item)
+                self._update_result(queue_item=queue_item)
+
+            except Exception as e:
+                log.error(f"Unexpected error while processing queue item pk={queue_item.pk}: {e}", exc_info=True)
+                self.result_status = GeoServerQueueStatus.FAILED
+                self.result_success = False
+                self._add_publishing_log(f"Unexpected error: {e}")
+                try:
+                    self._update_result(queue_item=queue_item)
+                except Exception as save_error:
+                    log.error(f"Failed to save error state for queue item pk={queue_item.pk}: {save_error}", exc_info=True)
 
     def _retrieve_target_items(self):
         """ Retrieve items that their status is ready or status is on_publishing & started before 30 minutes from now """
