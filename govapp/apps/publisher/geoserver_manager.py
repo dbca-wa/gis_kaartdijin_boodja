@@ -193,29 +193,42 @@ class GeoServerQueueExcutor:
 
             workspace_name = channel.workspace.name
             full_layer_name = f"{workspace_name}:{layer_name}"
-            url = f"{geoserver_pool.url}/gwc/rest/masstruncate"
 
-            try:
-                response = requests.post(
-                    url=url,
-                    auth=HTTPBasicAuth(geoserver_pool.username, geoserver_pool.password),
-                    headers={'Content-type': 'text/xml'},
-                    data=f"<truncateLayer><layerName>{full_layer_name}</layerName></truncateLayer>",
-                    timeout=30,
-                )
-                if response.status_code == 200:
-                    self._add_publishing_log(f"[{full_layer_name} - {geoserver_pool.name}] Purge cache succeeded.")
-                else:
+            # Use cluster nodes if available, otherwise fall back to the pool's own URL.
+            cluster_nodes = geoserver_pool.cluster_nodes.filter(enabled=True)
+            if cluster_nodes.exists():
+                targets = [
+                    (node.server_url, node.username, node.password, f"{geoserver_pool.name} / node {node.server_url}")
+                    for node in cluster_nodes
+                ]
+            else:
+                targets = [
+                    (geoserver_pool.url, geoserver_pool.username, geoserver_pool.password, geoserver_pool.name)
+                ]
+
+            for target_url, target_username, target_password, target_label in targets:
+                url = f"{target_url}/gwc/rest/masstruncate"
+                try:
+                    response = requests.post(
+                        url=url,
+                        auth=HTTPBasicAuth(target_username, target_password),
+                        headers={'Content-type': 'text/xml'},
+                        data=f"<truncateLayer><layerName>{full_layer_name}</layerName></truncateLayer>",
+                        timeout=30,
+                    )
+                    if response.status_code == 200:
+                        self._add_publishing_log(f"[{full_layer_name} - {target_label}] Purge cache succeeded.")
+                    else:
+                        self.result_status = GeoServerQueueStatus.FAILED
+                        self.result_success = False
+                        self._add_publishing_log(
+                            f"[{full_layer_name} - {target_label}] Purge cache failed. "
+                            f"Status: {response.status_code}, Response: {response.text}"
+                        )
+                except requests.exceptions.RequestException as e:
                     self.result_status = GeoServerQueueStatus.FAILED
                     self.result_success = False
-                    self._add_publishing_log(
-                        f"[{full_layer_name} - {geoserver_pool.name}] Purge cache failed. "
-                        f"Status: {response.status_code}, Response: {response.text}"
-                    )
-            except requests.exceptions.RequestException as e:
-                self.result_status = GeoServerQueueStatus.FAILED
-                self.result_success = False
-                self._add_publishing_log(f"[{full_layer_name} - {geoserver_pool.name}] Purge cache failed. Network error: {e}")
+                    self._add_publishing_log(f"[{full_layer_name} - {target_label}] Purge cache failed. Network error: {e}")
 
     def _update_result(self, queue_item: geoserver_queues.GeoServerQueue):
         queue_item.status = self.result_status
