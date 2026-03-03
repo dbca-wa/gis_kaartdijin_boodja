@@ -4,6 +4,8 @@
 import logging
 
 # Third-Party
+import requests
+from requests.auth import HTTPBasicAuth
 from django.db.models import Q
 from django.utils import timezone
 from django.contrib import auth
@@ -11,7 +13,7 @@ from django.contrib import auth
 # Local
 from govapp.apps.publisher.models import geoserver_queues
 from govapp.apps.publisher.models import geoserver_roles_groups
-from govapp.apps.publisher.models.geoserver_queues import GeoServerQueueStatus
+from govapp.apps.publisher.models.geoserver_queues import GeoServerQueueStatus, GeoServerQueueType
 from govapp.apps.publisher.models import geoserver_pools
 from govapp.apps.publisher import geoserver_publisher
 from govapp.apps.publisher.models.geoserver_roles_groups import GeoServerGroup, GeoServerRole
@@ -65,12 +67,15 @@ class GeoServerQueueExcutor:
         count = 0
         for entry in eligible_entries:
             # Check if there's already a queue item for this entry that's not completed
-            already_queued = geoserver_queues.GeoServerQueue.is_publish_entry_queued(entry)
-            
+            already_queued = geoserver_queues.GeoServerQueue.is_publish_entry_queued(
+                entry, queue_type=GeoServerQueueType.PUBLISH
+            )
+
             if not already_queued:
                 # Create new queue item
                 geoserver_queues.GeoServerQueue.objects.create(
                     publish_entry=entry,
+                    queue_type=GeoServerQueueType.PUBLISH,
                     symbology_only=False,  # Full publish by default
                 )
                 count += 1
@@ -79,35 +84,49 @@ class GeoServerQueueExcutor:
         log.info(f"Auto-enqueue process completed. Added {count} entries to queue")
 
     def excute(self) -> None:
-        geoserver_queues = self._retrieve_target_items()
-        log.info(f"Start publishing for {geoserver_queues.count()} geoserver queue items.")
+        queue_items = self._retrieve_target_items()
+        log.info(f"Start publishing for {queue_items.count()} geoserver queue items.")
 
-        for geoserver_queue in geoserver_queues:
-            self._init_excuting(queue_item=geoserver_queue)
-        
-            for geoserver_publish_channel in geoserver_queue.publish_entry.geoserver_channels.all():
-                geoserver_pool = geoserver_publish_channel.geoserver_pool
+        for queue_item in queue_items:
+            try:
+                self._init_excuting(queue_item=queue_item)
 
-                if not geoserver_pool:
-                    # No geoserver_pool configured
-                    self.result_status = GeoServerQueueStatus.FAILED
-                    self.result_success = False
-                    self._add_publishing_log(f"[{geoserver_queue.publish_entry.name}] Publishing failed.  No geoserver_pool configured.")
-                    continue
+                if queue_item.queue_type == GeoServerQueueType.PURGE_CACHE:
+                    self._purge_cache_for_queue_item(queue_item)
+                else:
+                    for geoserver_publish_channel in queue_item.publish_entry.geoserver_channels.all():
+                        geoserver_pool = geoserver_publish_channel.geoserver_pool
 
-                if not geoserver_pool.enabled:
-                    # No geoserver_pool configured
-                    self.result_status = GeoServerQueueStatus.FAILED
-                    self.result_success = False
-                    self._add_publishing_log(f"[{geoserver_queue.publish_entry.name} - {geoserver_pool.url}] Publishing failed.  Geoserver_pool is not enabled.")
-                    continue
+                        if not geoserver_pool:
+                            # No geoserver_pool configured
+                            self.result_status = GeoServerQueueStatus.FAILED
+                            self.result_success = False
+                            self._add_publishing_log(f"[{queue_item.publish_entry.name}] Publishing failed.  No geoserver_pool configured.")
+                            continue
 
-                # Make sure all the workspace exist in the geoserver
-                workspaces_in_kb = Workspace.objects.all()
-                for workspace in workspaces_in_kb:
-                    geoserver_pool.create_workspace_if_not_exists(workspace.name)
-                self._publish_to_a_geoserver(geoserver_publish_channel)
-            self._update_result(queue_item=geoserver_queue)
+                        if not geoserver_pool.enabled:
+                            self.result_status = GeoServerQueueStatus.FAILED
+                            self.result_success = False
+                            self._add_publishing_log(f"[{queue_item.publish_entry.name} - {geoserver_pool.url}] Publishing failed.  Geoserver_pool is not enabled.")
+                            continue
+
+                        # Make sure all the workspace exist in the geoserver
+                        workspaces_in_kb = Workspace.objects.all()
+                        for workspace in workspaces_in_kb:
+                            geoserver_pool.create_workspace_if_not_exists(workspace.name)
+                        self._publish_to_a_geoserver(geoserver_publish_channel)
+
+                self._update_result(queue_item=queue_item)
+
+            except Exception as e:
+                log.error(f"Unexpected error while processing queue item pk={queue_item.pk}: {e}", exc_info=True)
+                self.result_status = GeoServerQueueStatus.FAILED
+                self.result_success = False
+                self._add_publishing_log(f"Unexpected error: {e}")
+                try:
+                    self._update_result(queue_item=queue_item)
+                except Exception as save_error:
+                    log.error(f"Failed to save error state for queue item pk={queue_item.pk}: {save_error}", exc_info=True)
 
     def _retrieve_target_items(self):
         """ Retrieve items that their status is ready or status is on_publishing & started before 30 minutes from now """
@@ -120,6 +139,7 @@ class GeoServerQueueExcutor:
         queue_item.change_status(GeoServerQueueStatus.ON_PUBLISHING)
         self.publishing_log = queue_item.publishing_result if queue_item.publishing_result is not None else ""
         self.result_status = GeoServerQueueStatus.PUBLISHED
+        self.result_success = True
         self._add_publishing_log("Start publishing..")
 
     def _add_publishing_log(self, msg):
@@ -141,7 +161,75 @@ class GeoServerQueueExcutor:
             self.result_success = False
             self._add_publishing_log(f"[{geoserver_publish_channel.publish_entry.name} - {geoserver_publish_channel.geoserver_pool.url}] Publishing failed.")
             self._add_publishing_log(f"[{geoserver_publish_channel.publish_entry.name} - {geoserver_publish_channel.geoserver_pool.url}] {exc}")
-            
+
+    def _purge_cache_for_queue_item(self, queue_item: geoserver_queues.GeoServerQueue) -> None:
+        """Send a GWC masstruncate request to every active GeoServer channel for the publish entry."""
+        publish_entry = queue_item.publish_entry
+        layer_name = publish_entry.catalogue_entry.name
+
+        active_channels = GeoServerPublishChannel.objects.filter(
+            publish_entry=publish_entry,
+            active=True,
+        ).select_related('geoserver_pool', 'workspace')
+
+        if not active_channels.exists():
+            self.result_status = GeoServerQueueStatus.FAILED
+            self.result_success = False
+            self._add_publishing_log(f"[{layer_name}] Purge cache failed. No active GeoServer publish channels found.")
+            return
+
+        for channel in active_channels:
+            geoserver_pool = channel.geoserver_pool
+
+            if not geoserver_pool:
+                self.result_status = GeoServerQueueStatus.FAILED
+                self.result_success = False
+                self._add_publishing_log(f"[{layer_name}] Purge cache failed. Channel pk={channel.pk} has no geoserver_pool.")
+                continue
+
+            if not geoserver_pool.enabled:
+                self._add_publishing_log(f"[{layer_name} - {geoserver_pool.name}] Skipped purge. GeoServer pool is disabled.")
+                continue
+
+            workspace_name = channel.workspace.name
+            full_layer_name = f"{workspace_name}:{layer_name}"
+
+            # Use cluster nodes if available, otherwise fall back to the pool's own URL.
+            cluster_nodes = geoserver_pool.cluster_nodes.filter(enabled=True)
+            if cluster_nodes.exists():
+                targets = [
+                    (node.server_url, node.username, node.password, f"{geoserver_pool.name} / node {node.server_url}")
+                    for node in cluster_nodes
+                ]
+            else:
+                targets = [
+                    (geoserver_pool.url, geoserver_pool.username, geoserver_pool.password, geoserver_pool.name)
+                ]
+
+            for target_url, target_username, target_password, target_label in targets:
+                url = f"{target_url}/gwc/rest/masstruncate"
+                try:
+                    response = requests.post(
+                        url=url,
+                        auth=HTTPBasicAuth(target_username, target_password),
+                        headers={'Content-type': 'text/xml'},
+                        data=f"<truncateLayer><layerName>{full_layer_name}</layerName></truncateLayer>",
+                        timeout=30,
+                    )
+                    if response.status_code == 200:
+                        self._add_publishing_log(f"[{full_layer_name} - {target_label}] Purge cache succeeded.")
+                    else:
+                        self.result_status = GeoServerQueueStatus.FAILED
+                        self.result_success = False
+                        self._add_publishing_log(
+                            f"[{full_layer_name} - {target_label}] Purge cache failed. "
+                            f"Status: {response.status_code}, Response: {response.text}"
+                        )
+                except requests.exceptions.RequestException as e:
+                    self.result_status = GeoServerQueueStatus.FAILED
+                    self.result_success = False
+                    self._add_publishing_log(f"[{full_layer_name} - {target_label}] Purge cache failed. Network error: {e}")
+
     def _update_result(self, queue_item: geoserver_queues.GeoServerQueue):
         queue_item.status = self.result_status
         queue_item.success = self.result_success
@@ -153,13 +241,36 @@ def push(publish_entry: "PublishEntry", symbology_only: bool, submitter: UserMod
         log.info(f"'{publish_entry}' has no GeoServer Publish Channel")
         return False
 
-    already_queued = geoserver_queues.GeoServerQueue.is_publish_entry_queued(publish_entry)
-    
+    already_queued = geoserver_queues.GeoServerQueue.is_publish_entry_queued(
+        publish_entry, queue_type=GeoServerQueueType.PUBLISH
+    )
+
     if not already_queued:
         geoserver_queues.GeoServerQueue.objects.create(
             publish_entry=publish_entry,
+            queue_type=GeoServerQueueType.PUBLISH,
             symbology_only=symbology_only,
             submitter=submitter)
+    return True
+
+
+def push_purge_cache(publish_entry: "PublishEntry", submitter: UserModel=None) -> bool:
+    """Enqueue a purge tile cache job for the given publish entry."""
+    already_queued = geoserver_queues.GeoServerQueue.is_publish_entry_queued(
+        publish_entry, queue_type=GeoServerQueueType.PURGE_CACHE
+    )
+
+    if already_queued:
+        log.info(f"'{publish_entry}' purge cache is already queued. Skipping.")
+        return False
+
+    geoserver_queues.GeoServerQueue.objects.create(
+        publish_entry=publish_entry,
+        queue_type=GeoServerQueueType.PURGE_CACHE,
+        symbology_only=False,
+        submitter=submitter,
+    )
+    log.info(f"'{publish_entry}' purge cache enqueued.")
     return True
 
 

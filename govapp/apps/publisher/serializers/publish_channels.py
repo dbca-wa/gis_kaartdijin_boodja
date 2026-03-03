@@ -254,6 +254,7 @@ class GeoServerQueueSerializer(serializers.ModelSerializer):
     name = serializers.CharField(source='publish_entry.name')
     status = serializers.SerializerMethodField()
     submitter = serializers.SerializerMethodField()
+    queue_type = serializers.SerializerMethodField()
 
     class Meta:
         """GeoServer Queue Model Serializer Metadata."""
@@ -261,10 +262,25 @@ class GeoServerQueueSerializer(serializers.ModelSerializer):
         fields = "__all__"
         
     def get_status(self, obj):
+        # Use different display labels for PURGE_CACHE queue type
+        if obj.queue_type == models.geoserver_queues.GeoServerQueueType.PURGE_CACHE:
+            status_label_map = {
+                models.geoserver_queues.GeoServerQueueStatus.READY: "READY",
+                models.geoserver_queues.GeoServerQueueStatus.ON_PUBLISHING: "PROCESSING",
+                models.geoserver_queues.GeoServerQueueStatus.PUBLISHED: "PURGED",
+                models.geoserver_queues.GeoServerQueueStatus.FAILED: "FAILED",
+            }
+            return status_label_map.get(obj.status, obj.status)
         for status in models.geoserver_queues.GeoServerQueueStatus:
             if status == obj.status:
                 return status.name
-            
+
+    def get_queue_type(self, obj):
+        for queue_type in models.geoserver_queues.GeoServerQueueType:
+            if queue_type == obj.queue_type:
+                return queue_type.name
+        return None
+
     def get_submitter(self, obj):
         first_name = obj.submitter.first_name if hasattr(obj.submitter, 'first_name') else ""
         last_name = obj.submitter.last_name if hasattr(obj.submitter, 'last_name') else ""

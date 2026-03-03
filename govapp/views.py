@@ -5,6 +5,7 @@
 import os
 import json
 import logging
+import requests
 from django import http
 from django import shortcuts
 from django.views.generic import base
@@ -15,6 +16,10 @@ from rest_framework.decorators import permission_classes
 from owslib.wms import WebMapService
 from django.contrib.auth.mixins import UserPassesTestMixin
 from django.contrib.auth.decorators import login_required, user_passes_test
+from requests.auth import HTTPBasicAuth
+from rest_framework.views import APIView
+from rest_framework.response import Response
+from rest_framework import status
 
 # Internal
 from govapp import settings
@@ -35,6 +40,7 @@ from typing import Any
 
 from govapp.apps.publisher.models.geoserver_pools import GeoServerPool, GeoServerGroup, GeoServerGroupUser
 from govapp.apps.publisher.models.publish_channels import GeoServerPublishChannel, StoreType
+from govapp.apps.publisher import geoserver_manager
 
 UserModel = auth.get_user_model()
 
@@ -754,3 +760,30 @@ def get_logs(request):
             'log_lines': last_x_lines,
             'current_position': current_position,
         })
+
+
+class PurgeTileCacheAPIView(APIView):
+    """
+    API View to enqueue a purge tile cache job for a specific Publish Entry.
+    The actual purge is processed asynchronously by the GeoServer queue cron job.
+    """
+    def post(self, request, publish_entry_pk):
+        logger.info(f"Received request to queue purge tile cache for PublishEntry pk={publish_entry_pk}.")
+
+        try:
+            publish_entry = publish_entries_models.PublishEntry.objects.get(pk=publish_entry_pk)
+        except publish_entries_models.PublishEntry.DoesNotExist:
+            logger.warning(f"PublishEntry with pk={publish_entry_pk} not found.")
+            return Response({"error": "Publish Entry not found."}, status=status.HTTP_404_NOT_FOUND)
+
+        enqueued = geoserver_manager.push_purge_cache(
+            publish_entry=publish_entry,
+            submitter=request.user,
+        )
+
+        if enqueued:
+            logger.info(f"PublishEntry pk={publish_entry_pk} purge cache enqueued successfully.")
+            return Response({"message": "Purge tile cache job queued successfully."}, status=status.HTTP_202_ACCEPTED)
+        else:
+            logger.info(f"PublishEntry pk={publish_entry_pk} purge cache is already queued.")
+            return Response({"message": "Purge tile cache is already queued."}, status=status.HTTP_202_ACCEPTED)

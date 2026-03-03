@@ -26,6 +26,12 @@ class GeoServerQueueStatus(models.IntegerChoices):
     PUBLISHED = 2
     FAILED = 3
 
+
+class GeoServerQueueType(models.IntegerChoices):
+    PUBLISH = 0
+    PURGE_CACHE = 1
+
+
 @reversion.register()
 class GeoServerQueue(mixins.RevisionedMixin):
     """Model for an Geoserver Queue."""
@@ -34,6 +40,7 @@ class GeoServerQueue(mixins.RevisionedMixin):
         related_name="geoserver_queues",
         on_delete=models.CASCADE,
     )
+    queue_type = models.IntegerField(choices=GeoServerQueueType.choices, default=GeoServerQueueType.PUBLISH)
     symbology_only = models.BooleanField(default=True)
     status = models.IntegerField(choices=GeoServerQueueStatus.choices, default=GeoServerQueueStatus.READY)
     publishing_result = models.TextField(null=True)
@@ -56,18 +63,20 @@ class GeoServerQueue(mixins.RevisionedMixin):
         verbose_name_plural = "Geoserver Queues"
 
     @classmethod
-    def is_publish_entry_queued(cls, publish_entry: "PublishEntry") -> bool:
-        """Checks if a publish entry is already queued.
+    def is_publish_entry_queued(cls, publish_entry: "PublishEntry", queue_type: "GeoServerQueueType" = GeoServerQueueType.PUBLISH) -> bool:
+        """Checks if a publish entry is already queued for the given queue type.
 
         Args:
             publish_entry (PublishEntry): The publish entry to check.
+            queue_type (GeoServerQueueType): The type of queue to check. Defaults to PUBLISH.
 
         Returns:
             bool: True if the publish entry is already queued to be processed, False otherwise.
         """
-        # Check if the publish entry is already queued
+        # Check if the publish entry is already queued for this specific queue type
         existing = cls.objects.filter(
             publish_entry=publish_entry,
+            queue_type=queue_type,
             status__in=[GeoServerQueueStatus.READY, GeoServerQueueStatus.ON_PUBLISHING,]
         ).exists()
         return existing

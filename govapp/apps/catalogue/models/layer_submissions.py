@@ -5,6 +5,7 @@
 from django.db import models
 import reversion
 import logging
+import requests
 
 # Local
 from govapp.apps.catalogue.models.permission import CatalogueEntryAccessPermission, CatalogueEntryPermission
@@ -32,6 +33,7 @@ class LayerSubmission(mixins.RevisionedMixin):
     """Model for a Layer Submission."""
     description = models.TextField(blank=True)
     file = models.URLField()
+    file_size = models.BigIntegerField(null=True, blank=True, help_text="File size in bytes.")
     is_active = models.BooleanField()
     status = models.IntegerField(choices=LayerSubmissionStatus.choices, default=LayerSubmissionStatus.SUBMITTED)
     created_at = models.DateTimeField()
@@ -58,6 +60,27 @@ class LayerSubmission(mixins.RevisionedMixin):
         """
         # Generate String and Return
         return f"{self.name}"
+    
+    def save(self, *args, **kwargs):
+        # When the model is saved, try to fetch the file size
+        if self.file and not self.file_size:
+            try:
+                # Use a HEAD request to get headers without downloading the full file
+                response = requests.head(self.file, allow_redirects=True, timeout=5) # 5 second timeout
+                response.raise_for_status()
+
+                # Get the file size from the 'Content-Length' header
+                size = response.headers.get('Content-Length')
+                if size:
+                    self.file_size = int(size)
+
+            except requests.exceptions.RequestException as e:
+                # If there's a network error or the URL is invalid,
+                # we can log the error and leave file_size as null.
+                log.error(f"Could not fetch file size for [{self.file}: {e}")
+                pass
+
+        super().save(*args, **kwargs) # Call the "real" save() method.
     
     @property
     def is_restricted(self):

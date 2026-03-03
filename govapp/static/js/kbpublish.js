@@ -1388,6 +1388,14 @@ var kbpublish = {
                                     html += '</div>'
                                 }
                             }
+
+                            if (response.results[i].num_of_cache_enabled_channels > 0) {
+                                let purge_button_json = '{"id": "' + response.results[i].id + '", "name": "' + response.results[i].name.replace(/"/g, '&quot;') + '"}';
+                                html += "<div class='mt-1' style='position: relative;'>";
+                                html += "<button class='btn btn-warning btn-sm w-100 purge-cache-btn' data-json='" + purge_button_json + "'>Purge Tile Cache (" + response.results[i].num_of_cache_enabled_channels + ")</button>";
+                                html += "</div>";
+                            }
+
                             html+="<div class='d-flex gap-1 mt-1'>"
                                 html+="<a class='btn btn-primary btn-sm flex-grow-1' href='/publish/"+response.results[i].id+"'>View</a>";
                                 // html+="<button class='btn btn-secondary btn-sm flex-grow-1'>History</button>";
@@ -1413,20 +1421,21 @@ var kbpublish = {
                     var btndata = JSON.parse(btndata_json);
                     kbpublish.publish_to_geoserver(btndata.id, $(this));
                 });     
-                
                 $( ".publish-to-cddp-btn" ).click(function() {
                     var btndata_json = $(this).attr('data-json');
                     var btndata = JSON.parse(btndata_json);
                     kbpublish.publish_to_cddp(btndata.id, $(this));
                 });    
-                
                 $( ".publish-to-ftp-btn" ).click(function() {
                     var btndata_json = $(this).attr('data-json');
                     var btndata = JSON.parse(btndata_json);
                     kbpublish.publish_to_ftp(btndata.id, $(this));
                 });
-
-       
+                $(".purge-cache-btn").click(function() {
+                    var btndata_json = $(this).attr('data-json');
+                    var btndata = JSON.parse(btndata_json);
+                    kbpublish.purge_cache_for_entry(btndata.id, btndata.name, $(this)); 
+                });
             },
             error: function (error) {
                 $('#save-publish-popup-error').html("Error Loading publish data");
@@ -1650,8 +1659,9 @@ var kbpublish = {
     },
     get_publish_geoservers: function() {
         var publish_id = $('#publish_id').val();
+        var target_url = kbpublish.var.publish_data_url+publish_id+"/geoserver/";
         $.ajax({
-            url: kbpublish.var.publish_data_url+publish_id+"/geoserver/",
+            url: target_url,
             method: 'GET',
             dataType: 'json',
             contentType: 'application/json',
@@ -2518,6 +2528,52 @@ var kbpublish = {
             data: JSON.stringify(communication_log_data),
             success: success_callback,
             error: error_callback
+        });
+    },
+    purge_cache_for_entry: function(publishEntryId, publishEntryName, button) {
+        const confirmation = confirm(
+            `Are you sure you want to purge the tile cache for '${publishEntryName}' (PE${publishEntryId})?\n\nThe purge job will be added to the queue and processed shortly.`
+        );
+        if (!confirmation) {
+            return;
+        }
+
+        button.prop('disabled', true);
+        button.html('<span class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></span> Queuing...');
+
+        const url = `/api/publish_entries/${publishEntryId}/purge_cache/`;
+        const csrf_token = $("#csrfmiddlewaretoken").val();
+
+        $.ajax({
+            url: url,
+            type: 'POST',
+            headers: {'X-CSRFToken': csrf_token},
+            contentType: 'application/json',
+            success: function(response) {
+                console.log("Purge cache queued:", response);
+                button.removeClass('btn-warning').addClass('btn-success');
+                button.html('Queued!');
+                
+                setTimeout(function() {
+                    button.prop('disabled', false);
+                    button.removeClass('btn-success').addClass('btn-warning');
+                    button.text('Purge Tile Cache');
+                }, 3000);
+            },
+            error: function(error) {
+                console.error("Error queuing purge tile cache:", error.responseJSON);
+                const errorMessage = error.responseJSON?.error || 'An unknown error occurred.';
+                alert(`Failed to queue purge tile cache for '${publishEntryName}':\n${errorMessage}`);
+
+                button.removeClass('btn-warning').addClass('btn-danger');
+                button.text('Error');
+
+                setTimeout(function() {
+                    button.prop('disabled', false);
+                    button.removeClass('btn-danger').addClass('btn-warning');
+                    button.text('Purge Tile Cache');
+                }, 3000);
+            }
         });
     },
 }
