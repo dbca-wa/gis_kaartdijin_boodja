@@ -389,7 +389,7 @@ class CatalogueEntryViewSet(
 
         # select query using inner join and filter
         start_date = self.get_db_now() - timedelta(days=int(days_ago))
-        filtered = models.layer_submissions.LayerSubmission.objects.select_related('catalogue_entry').filter(catalogue_entry__updated_at__gte=start_date, is_active=True)
+        filtered = models.layer_submissions.LayerSubmission.objects.select_related('catalogue_entry').filter(submitted_at__gte=start_date, is_active=True)
         selected = filtered.values('catalogue_entry__id', 'catalogue_entry__name', 'catalogue_entry__created_at', 'catalogue_entry__updated_at', 'id')
         
         # build a response data
