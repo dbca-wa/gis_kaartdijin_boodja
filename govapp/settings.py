@@ -343,6 +343,7 @@ CRON_CLASSES = [
     "govapp.apps.catalogue.cron.SharepointScannerCronJob",
     "govapp.apps.catalogue.cron.DirectoryScannerCronJob",
     "govapp.apps.publisher.cron.PublishGeoServerQueueCronJob",
+    "govapp.apps.publisher.cron.PublishGeoServerReadyToPublishCronJob",
     "govapp.apps.publisher.cron.GeoServerLayerHealthcheckCronJob",
     "govapp.apps.publisher.cron.GeoServerSyncLayersCronJob", # layers
     "govapp.apps.publisher.cron.GeoServerSyncRulesCronJob", # rules
@@ -354,6 +355,10 @@ MANAGEMENT_COMMANDS_PAGE_ENABLED = decouple.config('MANAGEMENT_COMMANDS_PAGE_ENA
 
 # GeoServer Settings
 GEOSERVER_URL = decouple.config("GEOSERVER_URL", default="http://127.0.0.1:8600/geoserver")
+# Absolute path to the shared Docker volume as seen by GeoServer.
+# kb_geoserver_manager places converted GIS files here; KB uses this path
+# when calling the GeoServer REST API to configure path-based datastores.
+GEOSERVER_VOLUME_PATH = decouple.config("GEOSERVER_VOLUME_PATH", default="/data/geoserver_tiles")
 GEOSERVER_USERNAME = decouple.config("GEOSERVER_USERNAME", default="admin")
 GEOSERVER_PASSWORD = decouple.config("GEOSERVER_PASSWORD", default="geoserver")
 GEOSERVER_SECURITY_FILE_PATH=decouple.config("GEOSERVER_SECURITY_FILE_PATH", default="./config/geoserver_security/")
