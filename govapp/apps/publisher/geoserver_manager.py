@@ -94,27 +94,28 @@ class GeoServerQueueExcutor:
                 if queue_item.queue_type == GeoServerQueueType.PURGE_CACHE:
                     self._purge_cache_for_queue_item(queue_item)
                 else:
-                    for geoserver_publish_channel in queue_item.publish_entry.geoserver_channels.all():
-                        geoserver_pool = geoserver_publish_channel.geoserver_pool
-
-                        if not geoserver_pool:
-                            # No geoserver_pool configured
-                            self.result_status = GeoServerQueueStatus.FAILED
-                            self.result_success = False
-                            self._add_publishing_log(f"[{queue_item.publish_entry.name}] Publishing failed.  No geoserver_pool configured.")
-                            continue
-
-                        if not geoserver_pool.enabled:
-                            self.result_status = GeoServerQueueStatus.FAILED
-                            self.result_success = False
-                            self._add_publishing_log(f"[{queue_item.publish_entry.name} - {geoserver_pool.url}] Publishing failed.  Geoserver_pool is not enabled.")
-                            continue
-
-                        # Make sure all the workspace exist in the geoserver
-                        workspaces_in_kb = Workspace.objects.all()
-                        for workspace in workspaces_in_kb:
-                            geoserver_pool.create_workspace_if_not_exists(workspace.name)
-                        self._publish_to_a_geoserver(geoserver_publish_channel)
+                    if queue_item.symbology_only:
+                        # Symbology-only: publish style directly to GeoServer, no file transfer needed
+                        for geoserver_publish_channel in queue_item.publish_entry.geoserver_channels.all():
+                            geoserver_pool = geoserver_publish_channel.geoserver_pool
+                            if not geoserver_pool:
+                                self.result_status = GeoServerQueueStatus.FAILED
+                                self.result_success = False
+                                self._add_publishing_log(f"[{queue_item.publish_entry.name}] Publishing failed.  No geoserver_pool configured.")
+                                continue
+                            if not geoserver_pool.enabled:
+                                self.result_status = GeoServerQueueStatus.FAILED
+                                self.result_success = False
+                                self._add_publishing_log(f"[{queue_item.publish_entry.name} - {geoserver_pool.url}] Publishing failed.  Geoserver_pool is not enabled.")
+                                continue
+                            workspaces_in_kb = Workspace.objects.all()
+                            for workspace in workspaces_in_kb:
+                                geoserver_pool.create_workspace_if_not_exists(workspace.name)
+                            self._publish_to_a_geoserver(geoserver_publish_channel)
+                    else:
+                        # Phase 1: convert file only; kb_geoserver_manager will transfer it to the shared volume
+                        self.result_status = GeoServerQueueStatus.CONVERTED
+                        self._convert_publish_queue_item(queue_item)
 
                 self._update_result(queue_item=queue_item)
 
@@ -229,6 +230,93 @@ class GeoServerQueueExcutor:
                     self.result_status = GeoServerQueueStatus.FAILED
                     self.result_success = False
                     self._add_publishing_log(f"[{full_layer_name} - {target_label}] Purge cache failed. Network error: {e}")
+
+    def _convert_publish_queue_item(self, queue_item: geoserver_queues.GeoServerQueue) -> None:
+        """Phase 1: Convert the source file for transfer to the shared volume.
+
+        Uses the first active GeoServerPublishChannel to determine the target file format.
+        Stores the resulting file path in queue_item.converted_file_path.
+        On success the caller sets status → CONVERTED; on failure status → FAILED.
+        """
+        channels = queue_item.publish_entry.geoserver_channels.filter(active=True)
+        if not channels.exists():
+            channels = queue_item.publish_entry.geoserver_channels.all()
+
+        if not channels.exists():
+            self.result_status = GeoServerQueueStatus.FAILED
+            self.result_success = False
+            self._add_publishing_log(
+                f"[{queue_item.publish_entry.name}] Conversion failed: no GeoServerPublishChannel found."
+            )
+            return
+
+        # All channels share the same source file; use the first to determine the conversion type.
+        channel = channels.first()
+        try:
+            converted_path = channel.convert_layer()
+            queue_item.converted_file_path = str(converted_path)
+            queue_item.save(update_fields=['converted_file_path'])
+            self._add_publishing_log(
+                f"[{queue_item.publish_entry.name}] File converted successfully: {converted_path}"
+            )
+        except Exception as e:
+            self.result_status = GeoServerQueueStatus.FAILED
+            self.result_success = False
+            self._add_publishing_log(f"[{queue_item.publish_entry.name}] Conversion failed: {e}")
+            log.error(f"Conversion failed for queue item pk={queue_item.pk}: {e}", exc_info=True)
+
+    def excute_ready_to_publish(self) -> None:
+        """Phase 2: Configure GeoServer for READY_TO_PUBLISH items.
+
+        Picks up items that kb_geoserver_manager has placed on the shared volume
+        and configures the GeoServer datastore/layer using the file path on the volume.
+        """
+        queue_items = self._retrieve_ready_to_publish_items()
+        log.info(f"Start GeoServer configuration for {queue_items.count()} items.")
+
+        for queue_item in queue_items:
+            try:
+                self.publishing_log = queue_item.publishing_result or ""
+                self.result_status = GeoServerQueueStatus.PUBLISHED
+                self.result_success = True
+                self._add_publishing_log("Starting GeoServer configuration from shared volume...")
+
+                self._configure_geoserver_for_queue_item(queue_item)
+                self._update_result(queue_item=queue_item)
+
+            except Exception as e:
+                log.error(
+                    f"Unexpected error while configuring GeoServer for queue item pk={queue_item.pk}: {e}",
+                    exc_info=True
+                )
+                self.result_status = GeoServerQueueStatus.PUBLISH_FAILED
+                self.result_success = False
+                self._add_publishing_log(f"Unexpected error: {e}")
+                try:
+                    self._update_result(queue_item=queue_item)
+                except Exception as save_error:
+                    log.error(
+                        f"Failed to save error state for queue item pk={queue_item.pk}: {save_error}",
+                        exc_info=True
+                    )
+
+    def _retrieve_ready_to_publish_items(self):
+        """Retrieve all READY_TO_PUBLISH PUBLISH queue items."""
+        return geoserver_queues.GeoServerQueue.objects.filter(
+            status=GeoServerQueueStatus.READY_TO_PUBLISH,
+            queue_type=GeoServerQueueType.PUBLISH
+        ).order_by('created_at')
+
+    def _configure_geoserver_for_queue_item(self, queue_item: geoserver_queues.GeoServerQueue) -> None:
+        """Configure GeoServer using the file placed on the shared volume by kb_geoserver_manager.
+
+        To be fully implemented in a subsequent step once the GeoServer utility functions
+        for path-based datastore/coveragestore configuration are available.
+        """
+        # TODO: implement in the next step (geoserver.py path-based functions + publish_channels.py split)
+        raise NotImplementedError(
+            "GeoServer configuration from shared volume path is not yet implemented."
+        )
 
     def _update_result(self, queue_item: geoserver_queues.GeoServerQueue):
         queue_item.status = self.result_status
