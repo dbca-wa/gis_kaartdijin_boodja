@@ -25,6 +25,11 @@ class GeoServerQueueStatus(models.IntegerChoices):
     PROCESSING = 1
     PUBLISHED = 2
     FAILED = 3
+    CONVERTED = 4
+    UPLOAD_IN_PROGRESS = 5
+    UPLOAD_FAILED = 6
+    READY_TO_PUBLISH = 7
+    PUBLISH_FAILED = 8
 
 
 class GeoServerQueueType(models.IntegerChoices):
@@ -56,6 +61,7 @@ class GeoServerQueue(mixins.RevisionedMixin):
     started_at = models.DateTimeField(null=True)
     completed_at = models.DateTimeField(null=True)
     created_at = models.DateTimeField(auto_now_add=True)
+    converted_file_path = models.TextField(null=True, blank=True)
     
     class Meta:
         """Geoserver Queue Model Metadata."""
@@ -77,15 +83,21 @@ class GeoServerQueue(mixins.RevisionedMixin):
         existing = cls.objects.filter(
             publish_entry=publish_entry,
             queue_type=queue_type,
-            status__in=[GeoServerQueueStatus.READY, GeoServerQueueStatus.PROCESSING,]
+            status__in=[
+                GeoServerQueueStatus.READY,
+                GeoServerQueueStatus.PROCESSING,
+                GeoServerQueueStatus.CONVERTED,
+                GeoServerQueueStatus.UPLOAD_IN_PROGRESS,
+                GeoServerQueueStatus.READY_TO_PUBLISH,
+            ]
         ).exists()
         return existing
 
-    def change_status(self, status:GeoServerQueueStatus) -> None:
+    def change_status(self, status: GeoServerQueueStatus) -> None:
         self.status = status
-        if status == GeoServerQueueStatus.PROCESSING:
+        if status in (GeoServerQueueStatus.PROCESSING, GeoServerQueueStatus.UPLOAD_IN_PROGRESS):
             self.started_at = timezone.now()
-        elif status == GeoServerQueueStatus.PUBLISHED:
+        elif status in (GeoServerQueueStatus.PUBLISHED, GeoServerQueueStatus.READY_TO_PUBLISH):
             self.completed_at = timezone.now()
         self.save()
         
