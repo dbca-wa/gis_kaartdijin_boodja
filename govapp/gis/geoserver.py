@@ -411,6 +411,139 @@ class GeoServer:
             log.error(f"An unexpected error occurred during upload for store '{layer}'. Details: {e}")
             raise
 
+    @handle_http_exceptions(log)
+    def configure_geopackage_from_path(
+        self,
+        workspace: str,
+        layer: str,
+        file_path_on_volume: pathlib.Path,
+        memory_map_size: Optional[int] = None,
+    ) -> None:
+        """Configures a GeoPackage datastore in GeoServer using a file already present on the
+        shared Docker volume (no HTTP file upload).
+
+        Uses GeoServer's external file reference API
+        (PUT .../datastores/{store}/external.gpkg) which tells GeoServer to read the file
+        directly from its local filesystem rather than receiving the file over HTTP.
+
+        Args:
+            workspace: GeoServer workspace name.
+            layer: Datastore and layer name.
+            file_path_on_volume: Absolute path to the .gpkg file as seen by GeoServer
+                (i.e. the GeoServer-side mount path on the shared Docker volume).
+            memory_map_size: Optional memory map size parameter for large GeoPackage files.
+        """
+        log.info(
+            f"Configuring GeoPackage store '{layer}' in workspace '{workspace}' "
+            f"from volume path '{file_path_on_volume}'"
+        )
+        url = (
+            f"{self.service_url}/rest/workspaces/{workspace}"
+            f"/datastores/{layer}/external.gpkg"
+        )
+        params = {"configure": "all", "update": "overwrite"}
+        headers = {"Content-Type": "text/plain"}
+
+        with requests.Session() as session:
+            response = session.put(
+                url=url,
+                data=f"file://{file_path_on_volume}",
+                params=params,
+                headers=headers,
+                auth=(self.username, self.password),
+                timeout=300.0,
+            )
+            log.info(f"GeoServer response: '{response.status_code}: {response.text}'")
+            response.raise_for_status()
+
+        if memory_map_size is not None:
+            try:
+                self._update_gpkg_datastore_params(workspace, layer, {"memory map size": str(memory_map_size)})
+            except Exception as e:
+                log.warning(
+                    f"GeoPackage store configured from path, but failed to update memory map size "
+                    f"for store '{layer}'. Please check manually. Error: {e}"
+                )
+
+    @handle_http_exceptions(log)
+    def configure_geotiff_from_path(
+        self,
+        workspace: str,
+        layer: str,
+        file_path_on_volume: pathlib.Path,
+    ) -> None:
+        """Configures a GeoTIFF coveragestore in GeoServer using a file already present on the
+        shared Docker volume (no HTTP file upload).
+
+        Mirrors the pre-flight cleanup logic from :meth:`upload_tif` so that any stale layer
+        or coveragestore is removed before the new one is created, then uses GeoServer's
+        external file reference API (PUT .../coveragestores/{store}/external.geotiff).
+
+        Args:
+            workspace: GeoServer workspace name.
+            layer: Coveragestore and layer name.
+            file_path_on_volume: Absolute path to the .tif file as seen by GeoServer
+                (i.e. the GeoServer-side mount path on the shared Docker volume).
+        """
+        log.info(
+            f"Configuring GeoTIFF store '{layer}' in workspace '{workspace}' "
+            f"from volume path '{file_path_on_volume}'"
+        )
+
+        # Pre-flight cleanup: delete any stale layer and coveragestore so that
+        # creation of the new store is not blocked by an existing resource.
+        layer_delete_url = f"{self.service_url}/rest/layers/{workspace}:{layer}"
+        store_delete_url = (
+            f"{self.service_url}/rest/workspaces/{workspace}"
+            f"/coveragestores/{layer}?recurse=true"
+        )
+
+        try:
+            with requests.Session() as session:
+                session.auth = (self.username, self.password)
+
+                log.info(f"Attempting to delete layer (if it exists): {layer_delete_url}")
+                layer_del = session.delete(layer_delete_url, timeout=(15, 120))
+                if layer_del.status_code == 200:
+                    log.info(f"Deleted layer '{layer}'.")
+                elif layer_del.status_code == 404:
+                    log.info(f"Layer '{layer}' did not exist; nothing to delete.")
+                else:
+                    layer_del.raise_for_status()
+
+                log.info(f"Attempting to delete coverage store (if it exists): {store_delete_url}")
+                store_del = session.delete(store_delete_url, timeout=(15, 120))
+                if store_del.status_code == 200:
+                    log.info(f"Deleted coverage store '{layer}'.")
+                elif store_del.status_code == 404:
+                    log.info(f"Coverage store '{layer}' did not exist; nothing to delete.")
+                else:
+                    store_del.raise_for_status()
+
+                log.info(f"Pre-flight cleanup complete for resource '{layer}'.")
+        except requests.exceptions.RequestException as e:
+            log.error(f"Pre-flight cleanup failed for resource '{layer}': {e}")
+            raise
+
+        # Configure the coveragestore from the file path on the shared volume.
+        url = (
+            f"{self.service_url}/rest/workspaces/{workspace}"
+            f"/coveragestores/{layer}/external.geotiff"
+        )
+        params = {"configure": "all"}
+        headers = {"Content-Type": "text/plain"}
+
+        with requests.Session() as session:
+            response = session.put(
+                url=url,
+                data=f"file://{file_path_on_volume}",
+                params=params,
+                headers=headers,
+                auth=(self.username, self.password),
+                timeout=300.0,
+            )
+            log.info(f"GeoServer response: '{response.status_code}: {response.text}'")
+            response.raise_for_status()
 
     @handle_http_exceptions(log)
     def create_layer_from_coveragestore(self, workspace: str, layer: str) -> None:
