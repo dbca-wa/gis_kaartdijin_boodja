@@ -228,7 +228,7 @@ class PublishEntryViewSet(
 
         # already exists
         if publish_entry.geoserver_queues.filter(
-            status__in=[GeoServerQueueStatus.READY, GeoServerQueueStatus.ON_PUBLISHING]).exists():
+            status__in=[GeoServerQueueStatus.READY, GeoServerQueueStatus.PROCESSING]).exists():
             return response.Response(status=status.HTTP_409_CONFLICT)
         else:
             # creating a queue item when it doesn't exist

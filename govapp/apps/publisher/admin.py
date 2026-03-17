@@ -201,7 +201,7 @@ class GeoServerQueueAdmin(reversion.admin.VersionAdmin):
             return format_html('<span class="badge badge-pill bg-secondary">' + obj.get_status_display() + '</span>')
         elif obj.status == GeoServerQueueStatus.FAILED:
             return format_html('<span class="badge badge-pill bg-danger">' + obj.get_status_display() + '</span>')
-        elif obj.status == GeoServerQueueStatus.ON_PUBLISHING:
+        elif obj.status == GeoServerQueueStatus.PROCESSING:
             return format_html('<span class="badge badge-pill bg-warning">' + obj.get_status_display() + '</span>')
         elif obj.status == GeoServerQueueStatus.PUBLISHED:
             return format_html('<span class="badge badge-pill bg-success">' + obj.get_status_display() + '</span>')

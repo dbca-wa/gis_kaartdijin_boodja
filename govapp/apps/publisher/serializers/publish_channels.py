@@ -266,7 +266,7 @@ class GeoServerQueueSerializer(serializers.ModelSerializer):
         if obj.queue_type == models.geoserver_queues.GeoServerQueueType.PURGE_CACHE:
             status_label_map = {
                 models.geoserver_queues.GeoServerQueueStatus.READY: "READY",
-                models.geoserver_queues.GeoServerQueueStatus.ON_PUBLISHING: "PROCESSING",
+                models.geoserver_queues.GeoServerQueueStatus.PROCESSING: "PROCESSING",
                 models.geoserver_queues.GeoServerQueueStatus.PUBLISHED: "PURGED",
                 models.geoserver_queues.GeoServerQueueStatus.FAILED: "FAILED",
             }

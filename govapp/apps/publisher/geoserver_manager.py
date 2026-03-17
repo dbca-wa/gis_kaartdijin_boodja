@@ -129,14 +129,14 @@ class GeoServerQueueExcutor:
                     log.error(f"Failed to save error state for queue item pk={queue_item.pk}: {save_error}", exc_info=True)
 
     def _retrieve_target_items(self):
-        """ Retrieve items that their status is ready or status is on_publishing & started before 30 minutes from now """
+        """ Retrieve items that their status is ready or status is processing & started before 30 minutes from now """
         query = Q(status=GeoServerQueueStatus.READY) | \
-                Q(status=GeoServerQueueStatus.ON_PUBLISHING, started_at__lte=timezone.now() - timezone.timedelta(minutes=QUEUE_EXPIRED_MINUTES))
+                Q(status=GeoServerQueueStatus.PROCESSING, started_at__lte=timezone.now() - timezone.timedelta(minutes=QUEUE_EXPIRED_MINUTES))
         target_items = geoserver_queues.GeoServerQueue.objects.filter(query).order_by('created_at')
         return target_items
     
     def _init_excuting(self, queue_item):
-        queue_item.change_status(GeoServerQueueStatus.ON_PUBLISHING)
+        queue_item.change_status(GeoServerQueueStatus.PROCESSING)
         self.publishing_log = queue_item.publishing_result if queue_item.publishing_result is not None else ""
         self.result_status = GeoServerQueueStatus.PUBLISHED
         self.result_success = True

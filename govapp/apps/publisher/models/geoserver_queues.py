@@ -22,7 +22,7 @@ UserModel = auth.get_user_model()
 
 class GeoServerQueueStatus(models.IntegerChoices):
     READY = 0
-    ON_PUBLISHING = 1
+    PROCESSING = 1
     PUBLISHED = 2
     FAILED = 3
 
@@ -77,13 +77,13 @@ class GeoServerQueue(mixins.RevisionedMixin):
         existing = cls.objects.filter(
             publish_entry=publish_entry,
             queue_type=queue_type,
-            status__in=[GeoServerQueueStatus.READY, GeoServerQueueStatus.ON_PUBLISHING,]
+            status__in=[GeoServerQueueStatus.READY, GeoServerQueueStatus.PROCESSING,]
         ).exists()
         return existing
 
     def change_status(self, status:GeoServerQueueStatus) -> None:
         self.status = status
-        if status == GeoServerQueueStatus.ON_PUBLISHING:
+        if status == GeoServerQueueStatus.PROCESSING:
             self.started_at = timezone.now()
         elif status == GeoServerQueueStatus.PUBLISHED:
             self.completed_at = timezone.now()
