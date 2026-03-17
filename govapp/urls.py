@@ -51,6 +51,7 @@ urlpatterns = [
     urls.path("api/catalogue/", urls.include("govapp.apps.catalogue.urls")),
     urls.path("api/logs/", urls.include("govapp.apps.logs.urls")),
     urls.path("api/publish/", urls.include("govapp.apps.publisher.urls")),
+    urls.path("api/geoserver-manager/", urls.include("govapp.apps.publisher.urls_geoserver_manager")),
 
     # Management Command Endpoints
     urls.path("api/management/", urls.include("govapp.commands")),
