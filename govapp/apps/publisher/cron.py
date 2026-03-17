@@ -59,3 +59,21 @@ class GeoServerSyncRulesCronJob(django_cron.CronJobBase):  # rules
 
         # Run Management Command
         management.call_command("geoserver_sync_rules")
+
+
+class PublishGeoServerReadyToPublishCronJob(django_cron.CronJobBase):
+    """Cron Job for Phase 2 of GeoServer publishing.
+
+    Picks up READY_TO_PUBLISH items (i.e. files that kb_geoserver_manager has
+    placed on the shared Docker volume) and configures the GeoServer
+    datastore/layer using the file path on the volume.
+    """
+
+    schedule = django_cron.Schedule(
+        run_every_mins=conf.settings.PUBLISH_GEOSERVER_QUEUE_PERIOD_MINS
+    )
+    code = "govapp.publisher.geoserver_execute_ready_to_publish"
+
+    def do(self) -> None:
+        log.info("PublishGeoServerReadyToPublishCronJob triggered, running...")
+        management.call_command("geoserver_execute_ready_to_publish")
