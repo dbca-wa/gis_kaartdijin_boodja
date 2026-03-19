@@ -328,8 +328,8 @@ class GeoServerQueueExcutor:
             return
 
         # The filename on the shared volume matches the basename of the converted file.
+        # kb_geoserver_manager places the file at: <VOLUME_PATH>/<workspace>/<name>/<filename>
         filename = pathlib.Path(queue_item.converted_file_path).name
-        volume_file_path = pathlib.Path(settings.GEOSERVER_VOLUME_PATH) / filename
 
         channels = queue_item.publish_entry.geoserver_channels.filter(active=True)
         if not channels.exists():
@@ -366,6 +366,14 @@ class GeoServerQueueExcutor:
             )
             workspace_name = channel.workspace.name
             layer_name = queue_item.publish_entry.catalogue_entry.metadata.name
+
+            # kb_geoserver_manager places files at: <VOLUME_PATH>/<workspace>/<name>/<filename>
+            volume_file_path = (
+                pathlib.Path(settings.GEOSERVER_VOLUME_PATH)
+                / workspace_name
+                / queue_item.publish_entry.name
+                / filename
+            )
 
             try:
                 if channel.store_type == StoreType.GEOPACKAGE:
