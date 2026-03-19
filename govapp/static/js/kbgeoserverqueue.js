@@ -35,8 +35,10 @@ var kbgeoserverweb = {
                     'PURGE_CACHE': 'Purge Cache',
                 };
                 for(let i in response.results){
-                    if(response.results[i].status == 'FAILED') response.results[i].success = false;
-                    else if(response.results[i].status == 'PUBLISHED' || response.results[i].status == 'PURGED') response.results[i].success = true;
+                    const failed_statuses = ['FAILED', 'PUBLISH_FAILED', 'UPLOAD_FAILED'];
+                    const success_statuses = ['PUBLISHED', 'PURGED'];
+                    if(failed_statuses.includes(response.results[i].status)) response.results[i].success = false;
+                    else if(success_statuses.includes(response.results[i].status)) response.results[i].success = true;
                     else response.results[i].success = null;
                     response.results[i].queue_type_label = queue_type_label[response.results[i].queue_type] || response.results[i].queue_type;
                 }
