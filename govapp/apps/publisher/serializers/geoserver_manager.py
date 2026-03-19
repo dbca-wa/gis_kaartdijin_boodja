@@ -17,15 +17,27 @@ class GeoServerManagerQueueSerializer(serializers.ModelSerializer):
     name = serializers.CharField(source="publish_entry.name", read_only=True)
     # Basename of the converted file — this is the filename the download endpoint will serve
     file_name = serializers.SerializerMethodField()
+    # Workspace name from the first active GeoServerPublishChannel
+    workspace = serializers.SerializerMethodField()
 
     class Meta:
         model = GeoServerQueue
-        fields = ["id", "name", "status", "file_name"]
-        read_only_fields = ["id", "name", "file_name"]
+        fields = ["id", "name", "status", "file_name", "workspace"]
+        read_only_fields = ["id", "name", "file_name", "workspace"]
 
     def get_file_name(self, obj: GeoServerQueue) -> str | None:
         if obj.converted_file_path:
             return pathlib.Path(obj.converted_file_path).name
+        return None
+
+    def get_workspace(self, obj: GeoServerQueue) -> str | None:
+        channel = obj.publish_entry.geoserver_channels.filter(active=True).select_related("workspace").first()
+        if channel and channel.workspace:
+            return channel.workspace.name
+        # Fall back to any channel if no active one has a workspace
+        channel = obj.publish_entry.geoserver_channels.select_related("workspace").first()
+        if channel and channel.workspace:
+            return channel.workspace.name
         return None
 
 
