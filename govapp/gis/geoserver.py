@@ -411,6 +411,35 @@ class GeoServer:
             log.error(f"An unexpected error occurred during upload for store '{layer}'. Details: {e}")
             raise
 
+    def _build_file_url(
+        self,
+        file_path: pathlib.Path,
+        geoserver_data_dir: Optional[pathlib.Path] = None,
+    ) -> str:
+        """Builds a GeoServer file URL for an external file reference.
+
+        When ``geoserver_data_dir`` is provided and ``file_path`` is under it, returns a
+        ``file:data/<relative>`` URL so that GeoServer resolves the path internally relative
+        to its data directory.  This bypasses the GeoServer 2.23+ filesystem sandbox
+        canonical-path check that rejects SMB/Azure File Share mounted paths.
+
+        Otherwise falls back to an absolute ``file://<path>`` URL.
+        """
+        if geoserver_data_dir is not None:
+            try:
+                rel = file_path.relative_to(geoserver_data_dir)
+                # GeoServer resolves "file:<rel>" relative to its data directory.
+                # e.g. file_path=/opt/geoserver_data/data/ws/name/f.tif,
+                # data_dir=/opt/geoserver_data → rel=data/ws/name/f.tif
+                # → URL: file:data/ws/name/f.tif  ("data/" is the actual subdir name)
+                return f"file:{rel}"
+            except ValueError:
+                log.warning(
+                    f"File path '{file_path}' is not under geoserver_data_dir "
+                    f"'{geoserver_data_dir}'; falling back to absolute file URL."
+                )
+        return f"file://{file_path}"
+
     @handle_http_exceptions(log)
     def configure_geopackage_from_path(
         self,
@@ -418,6 +447,7 @@ class GeoServer:
         layer: str,
         file_path_on_volume: pathlib.Path,
         memory_map_size: Optional[int] = None,
+        geoserver_data_dir: Optional[pathlib.Path] = None,
     ) -> None:
         """Configures a GeoPackage datastore in GeoServer using a file already present on the
         shared Docker volume (no HTTP file upload).
@@ -432,11 +462,16 @@ class GeoServer:
             file_path_on_volume: Absolute path to the .gpkg file as seen by GeoServer
                 (i.e. the GeoServer-side mount path on the shared Docker volume).
             memory_map_size: Optional memory map size parameter for large GeoPackage files.
+            geoserver_data_dir: GeoServer data directory root. When provided and the file
+                is under this directory, uses ``file:data/<relative>`` URL format to bypass
+                the GeoServer 2.23+ filesystem sandbox canonical-path check on SMB mounts.
         """
         log.info(
             f"Configuring GeoPackage store '{layer}' in workspace '{workspace}' "
             f"from volume path '{file_path_on_volume}'"
         )
+        file_url = self._build_file_url(file_path_on_volume, geoserver_data_dir)
+        log.info(f"Using file URL: '{file_url}'")
         url = (
             f"{self.service_url}/rest/workspaces/{workspace}"
             f"/datastores/{layer}/external.gpkg"
@@ -447,7 +482,7 @@ class GeoServer:
         with requests.Session() as session:
             response = session.put(
                 url=url,
-                data=f"file://{file_path_on_volume}",
+                data=file_url,
                 params=params,
                 headers=headers,
                 auth=(self.username, self.password),
@@ -471,6 +506,7 @@ class GeoServer:
         workspace: str,
         layer: str,
         file_path_on_volume: pathlib.Path,
+        geoserver_data_dir: Optional[pathlib.Path] = None,
     ) -> None:
         """Configures a GeoTIFF coveragestore in GeoServer using a file already present on the
         shared Docker volume (no HTTP file upload).
@@ -484,6 +520,9 @@ class GeoServer:
             layer: Coveragestore and layer name.
             file_path_on_volume: Absolute path to the .tif file as seen by GeoServer
                 (i.e. the GeoServer-side mount path on the shared Docker volume).
+            geoserver_data_dir: GeoServer data directory root. When provided and the file
+                is under this directory, uses ``file:data/<relative>`` URL format to bypass
+                the GeoServer 2.23+ filesystem sandbox canonical-path check on SMB mounts.
         """
         log.info(
             f"Configuring GeoTIFF store '{layer}' in workspace '{workspace}' "
@@ -525,25 +564,63 @@ class GeoServer:
             log.error(f"Pre-flight cleanup failed for resource '{layer}': {e}")
             raise
 
-        # Configure the coveragestore from the file path on the shared volume.
-        url = (
-            f"{self.service_url}/rest/workspaces/{workspace}"
-            f"/coveragestores/{layer}/external.geotiff"
+        # Configure the coveragestore using the catalog REST API (two-step: store then coverage).
+        # We deliberately avoid the external.geotiff PUT endpoint because GeoServer 2.23+
+        # runs a sandbox canonical-path check on the file URL inside that handler, which
+        # rejects SMB / Azure File Share mounts even when the path is nominally correct.
+        # The catalog API just writes the store configuration without touching the file.
+        file_url = self._build_file_url(file_path_on_volume, geoserver_data_dir)
+        log.info(f"Using file URL: '{file_url}'")
+
+        # POST to the collection URL creates a new store.
+        stores_url = (
+            f"{self.service_url}/rest/workspaces/{workspace}/coveragestores.json"
         )
-        params = {"configure": "all"}
-        headers = {"Content-Type": "text/plain"}
+        coverage_url = (
+            f"{self.service_url}/rest/workspaces/{workspace}"
+            f"/coveragestores/{layer}/coverages.json"
+        )
+        store_payload = {
+            "coverageStore": {
+                "name": layer,
+                "type": "GeoTIFF",
+                "enabled": True,
+                "workspace": {"name": workspace},
+                "url": file_url,
+            }
+        }
+        # nativeName must match the GeoTIFF's internal coverage name, which GeoServer
+        # derives from the filename stem (e.g. "Tiff-Test-20260319_15.20260319_155927...").
+        native_name = file_path_on_volume.stem
+        coverage_payload = {
+            "coverage": {
+                "name": layer,
+                "nativeName": native_name,
+            }
+        }
 
         with requests.Session() as session:
-            response = session.put(
-                url=url,
-                data=f"file://{file_path_on_volume}",
-                params=params,
-                headers=headers,
-                auth=(self.username, self.password),
-                timeout=300.0,
+            session.auth = (self.username, self.password)
+
+            # Step 1: create the coverage store (just writes catalog config, no file I/O).
+            log.info(f"Creating coverage store via catalog API: {stores_url}")
+            resp_store = session.post(
+                url=stores_url,
+                json=store_payload,
+                timeout=60.0,
             )
-            log.info(f"GeoServer response: '{response.status_code}: {response.text}'")
-            response.raise_for_status()
+            log.info(f"Coverage store response: '{resp_store.status_code}: {resp_store.text}'")
+            resp_store.raise_for_status()
+
+            # Step 2: create the coverage (layer) from the store.
+            log.info(f"Creating coverage (layer) via catalog API: {coverage_url}")
+            resp_coverage = session.post(
+                url=coverage_url,
+                json=coverage_payload,
+                timeout=60.0,
+            )
+            log.info(f"Coverage response: '{resp_coverage.status_code}: {resp_coverage.text}'")
+            resp_coverage.raise_for_status()
 
     @handle_http_exceptions(log)
     def create_layer_from_coveragestore(self, workspace: str, layer: str) -> None:

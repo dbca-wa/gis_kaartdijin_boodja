@@ -358,7 +358,12 @@ GEOSERVER_URL = decouple.config("GEOSERVER_URL", default="http://127.0.0.1:8600/
 # Absolute path to the shared Docker volume as seen by GeoServer.
 # kb_geoserver_manager places converted GIS files here; KB uses this path
 # when calling the GeoServer REST API to configure path-based datastores.
-GEOSERVER_VOLUME_PATH = decouple.config("GEOSERVER_VOLUME_PATH", default="/data/geoserver_tiles")
+GEOSERVER_VOLUME_PATH = decouple.config("GEOSERVER_VOLUME_PATH", default="/opt/geoserver_data/data")
+# GeoServer data directory path (the root data directory, not the volume subdirectory).
+# When set, KB uses file:data/<relative> URL format instead of file:///<absolute> to avoid
+# GeoServer 2.23+ filesystem sandbox rejection of SMB/Azure File Share mounted paths.
+# Example: if volume path is /opt/geoserver_data/geoserver_data/data, data dir is /opt/geoserver_data
+GEOSERVER_DATA_DIR = decouple.config("GEOSERVER_DATA_DIR", default="/opt/geoserver_data")
 GEOSERVER_USERNAME = decouple.config("GEOSERVER_USERNAME", default="admin")
 GEOSERVER_PASSWORD = decouple.config("GEOSERVER_PASSWORD", default="geoserver")
 GEOSERVER_SECURITY_FILE_PATH=decouple.config("GEOSERVER_SECURITY_FILE_PATH", default="./config/geoserver_security/")

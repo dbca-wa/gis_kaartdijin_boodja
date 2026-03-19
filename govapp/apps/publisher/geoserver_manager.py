@@ -374,6 +374,7 @@ class GeoServerQueueExcutor:
                 / queue_item.publish_entry.name
                 / filename
             )
+            geoserver_data_dir = pathlib.Path(settings.GEOSERVER_DATA_DIR) if settings.GEOSERVER_DATA_DIR else None
 
             try:
                 if channel.store_type == StoreType.GEOPACKAGE:
@@ -382,12 +383,14 @@ class GeoServerQueueExcutor:
                         layer=layer_name,
                         file_path_on_volume=volume_file_path,
                         memory_map_size=channel.gpkg_memory_map_size,
+                        geoserver_data_dir=geoserver_data_dir,
                     )
                 elif channel.store_type == StoreType.GEOTIFF:
                     geoserver_obj.configure_geotiff_from_path(
                         workspace=workspace_name,
                         layer=layer_name,
                         file_path_on_volume=volume_file_path,
+                        geoserver_data_dir=geoserver_data_dir,
                     )
                 else:
                     self.result_status = GeoServerQueueStatus.PUBLISH_FAILED
