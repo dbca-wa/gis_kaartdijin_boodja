@@ -199,18 +199,22 @@ class GeoServerQueueAdmin(reversion.admin.VersionAdmin):
     def coloured_status(self, obj):
         if obj.status == GeoServerQueueStatus.READY:
             return format_html('<span class="badge badge-pill bg-secondary">' + obj.get_status_display() + '</span>')
-        elif obj.status == GeoServerQueueStatus.FAILED:
+        elif obj.status in (GeoServerQueueStatus.FAILED, GeoServerQueueStatus.PUBLISH_FAILED):
             return format_html('<span class="badge badge-pill bg-danger">' + obj.get_status_display() + '</span>')
-        elif obj.status == GeoServerQueueStatus.PROCESSING:
+        elif obj.status in (GeoServerQueueStatus.PROCESSING, GeoServerQueueStatus.UPLOAD_IN_PROGRESS):
             return format_html('<span class="badge badge-pill bg-warning">' + obj.get_status_display() + '</span>')
         elif obj.status == GeoServerQueueStatus.PUBLISHED:
             return format_html('<span class="badge badge-pill bg-success">' + obj.get_status_display() + '</span>')
+        elif obj.status in (GeoServerQueueStatus.CONVERTED, GeoServerQueueStatus.READY_TO_PUBLISH):
+            return format_html('<span class="badge badge-pill bg-info">' + obj.get_status_display() + '</span>')
+        elif obj.status == GeoServerQueueStatus.UPLOAD_FAILED:
+            return format_html('<span class="badge badge-pill bg-danger">' + obj.get_status_display() + '</span>')
         else:
-            return '---'
+            return format_html('<span class="badge badge-pill bg-secondary">' + obj.get_status_display() + '</span>')
     coloured_status.short_description = 'status'
 
     def get_success(self, obj):
-        if obj.status in [GeoServerQueueStatus.FAILED, GeoServerQueueStatus.PUBLISHED,]:
+        if obj.status in [GeoServerQueueStatus.FAILED, GeoServerQueueStatus.PUBLISHED, GeoServerQueueStatus.PUBLISH_FAILED,]:
             if obj.success:
                 return format_html('<img src="/static/admin/img/icon-yes.svg" alt="True">')
             else:
