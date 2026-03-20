@@ -711,7 +711,8 @@ class LayerSubscriptionViewSet(
         
         subscription_obj.save()
 
-        msg=f'Layer subscription: [{subscription_obj}] has been updated with the data: [{data}].'
+        safe_data = {k: ('***' if k == 'userpassword' else v) for k, v in data.items()}
+        msg=f'Layer subscription: [{subscription_obj}] has been updated with the data: [{safe_data}].'
         logs_utils.add_to_actions_log(
             user=request.user,
             model=subscription_obj,
