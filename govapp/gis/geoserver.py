@@ -574,11 +574,12 @@ class GeoServer:
 
         # POST to the collection URL creates a new store.
         stores_url = (
+            # Ref: https://docs.geoserver.org/stable/en/user/rest/api/coveragestores.html
             f"{self.service_url}/rest/workspaces/{workspace}/coveragestores.json"
         )
         coverage_url = (
-            f"{self.service_url}/rest/workspaces/{workspace}"
-            f"/coveragestores/{layer}/coverages.json"
+            # Ref: https://docs.geoserver.org/stable/en/user/rest/api/coverages.html
+            f"{self.service_url}/rest/workspaces/{workspace}/coveragestores/{layer}/coverages.json"
         )
         store_payload = {
             "coverageStore": {
