@@ -452,9 +452,11 @@ class GeoServer:
         """Configures a GeoPackage datastore in GeoServer using a file already present on the
         shared Docker volume (no HTTP file upload).
 
-        Uses GeoServer's external file reference API
-        (PUT .../datastores/{store}/external.gpkg) which tells GeoServer to read the file
-        directly from its local filesystem rather than receiving the file over HTTP.
+        Uses the GeoServer catalog REST API in two steps (datastore creation then featuretype
+        creation) rather than the external.gpkg PUT endpoint.  The external.gpkg endpoint
+        triggers GeoServer 2.23+ sandbox canonical-path checks which reject SMB / Azure File
+        Share mounted paths even when the file URL is otherwise correct.  The catalog API
+        just writes configuration without touching the file, bypassing the check.
 
         Args:
             workspace: GeoServer workspace name.
@@ -470,26 +472,102 @@ class GeoServer:
             f"Configuring GeoPackage store '{layer}' in workspace '{workspace}' "
             f"from volume path '{file_path_on_volume}'"
         )
+
+        # Pre-flight cleanup: delete any stale layer and datastore so that
+        # creation of the new store is not blocked by an existing resource.
+        layer_delete_url = f"{self.service_url}/rest/layers/{workspace}:{layer}"
+        store_delete_url = (
+            f"{self.service_url}/rest/workspaces/{workspace}"
+            f"/datastores/{layer}?recurse=true"
+        )
+
+        try:
+            with requests.Session() as session:
+                session.auth = (self.username, self.password)
+
+                log.info(f"Attempting to delete layer (if it exists): {layer_delete_url}")
+                layer_del = session.delete(layer_delete_url, timeout=(15, 120))
+                if layer_del.status_code == 200:
+                    log.info(f"Deleted layer '{layer}'.")
+                elif layer_del.status_code == 404:
+                    log.info(f"Layer '{layer}' did not exist; nothing to delete.")
+                else:
+                    layer_del.raise_for_status()
+
+                log.info(f"Attempting to delete datastore (if it exists): {store_delete_url}")
+                store_del = session.delete(store_delete_url, timeout=(15, 120))
+                if store_del.status_code == 200:
+                    log.info(f"Deleted datastore '{layer}'.")
+                elif store_del.status_code == 404:
+                    log.info(f"Datastore '{layer}' did not exist; nothing to delete.")
+                else:
+                    store_del.raise_for_status()
+
+                log.info(f"Pre-flight cleanup complete for resource '{layer}'.")
+        except requests.exceptions.RequestException as e:
+            log.error(f"Pre-flight cleanup failed for resource '{layer}': {e}")
+            raise
+
+        # Configure the datastore using the catalog REST API (two-step: store then featuretype).
+        # We deliberately avoid the external.gpkg PUT endpoint because GeoServer 2.23+
+        # runs a sandbox canonical-path check on the file URL inside that handler, which
+        # rejects SMB / Azure File Share mounts even when the path is nominally correct.
+        # The catalog API just writes the store configuration without touching the file.
         file_url = self._build_file_url(file_path_on_volume, geoserver_data_dir)
         log.info(f"Using file URL: '{file_url}'")
-        url = (
-            f"{self.service_url}/rest/workspaces/{workspace}"
-            f"/datastores/{layer}/external.gpkg"
+
+        datastores_url = (
+            f"{self.service_url}/rest/workspaces/{workspace}/datastores.json"
         )
-        params = {"configure": "all", "update": "overwrite"}
-        headers = {"Content-Type": "text/plain"}
+        featuretype_url = (
+            f"{self.service_url}/rest/workspaces/{workspace}"
+            f"/datastores/{layer}/featuretypes.json"
+        )
+        store_payload = {
+            "dataStore": {
+                "name": layer,
+                "type": "GeoPackage",
+                "enabled": True,
+                "workspace": {"name": workspace},
+                "connectionParameters": {
+                    "entry": [
+                        {"@key": "database", "$": file_url},
+                        {"@key": "dbtype", "$": "geopkg"},
+                    ]
+                },
+            }
+        }
+        # nativeName must match the layer name written into the GeoPackage by ogr2ogr.
+        # The conversion always uses -nln <layer>, so nativeName == layer.
+        featuretype_payload = {
+            "featureType": {
+                "name": layer,
+                "nativeName": layer,
+            }
+        }
 
         with requests.Session() as session:
-            response = session.put(
-                url=url,
-                data=file_url,
-                params=params,
-                headers=headers,
-                auth=(self.username, self.password),
-                timeout=300.0,
+            session.auth = (self.username, self.password)
+
+            # Step 1: create the datastore (just writes catalog config, no file I/O).
+            log.info(f"Creating GeoPackage datastore via catalog API: {datastores_url}")
+            resp_store = session.post(
+                url=datastores_url,
+                json=store_payload,
+                timeout=60.0,
             )
-            log.info(f"GeoServer response: '{response.status_code}: {response.text}'")
-            response.raise_for_status()
+            log.info(f"Datastore response: '{resp_store.status_code}: {resp_store.text}'")
+            resp_store.raise_for_status()
+
+            # Step 2: create the featuretype (layer) from the store.
+            log.info(f"Creating featuretype (layer) via catalog API: {featuretype_url}")
+            resp_ft = session.post(
+                url=featuretype_url,
+                json=featuretype_payload,
+                timeout=60.0,
+            )
+            log.info(f"Featuretype response: '{resp_ft.status_code}: {resp_ft.text}'")
+            resp_ft.raise_for_status()
 
         if memory_map_size is not None:
             try:
