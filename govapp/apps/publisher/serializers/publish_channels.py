@@ -86,6 +86,8 @@ class GeoServerPublishChannelSerializer(serializers.ModelSerializer):
             data['expire_server_cache_after_n_seconds'] = None
         if data.get('expire_client_cache_after_n_seconds') == "":
             data['expire_client_cache_after_n_seconds'] = None
+        if data.get('gpkg_memory_map_size') == "":
+            data['gpkg_memory_map_size'] = None
         return super().to_internal_value(data)
 
     def get_published_at(self, obj):
@@ -184,6 +186,8 @@ class GeoServerPublishChannelCreateSerializer(serializers.ModelSerializer):
             data['expire_server_cache_after_n_seconds'] = None
         if data.get('expire_client_cache_after_n_seconds') == "":
             data['expire_client_cache_after_n_seconds'] = None
+        if data.get('gpkg_memory_map_size') == "":
+            data['gpkg_memory_map_size'] = None
         return super().to_internal_value(data)
     
     def validate(self, data):
