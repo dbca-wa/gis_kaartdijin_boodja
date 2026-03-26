@@ -69,6 +69,7 @@ INSTALLED_APPS = [
     "django_cron",
     "appmonitor_client",
     "django_extensions",
+    "rest_framework.authtoken",
 ]
 REST_FRAMEWORK = {
     'DEFAULT_RENDERER_CLASSES': (
@@ -174,6 +175,10 @@ VERSION_NO = "2.00"
 # https://www.django-rest-framework.org/api-guide/settings/
 REST_FRAMEWORK = {
     "DEFAULT_SCHEMA_CLASS": "drf_spectacular.openapi.AutoSchema",
+    "DEFAULT_AUTHENTICATION_CLASSES": [
+        "rest_framework.authentication.TokenAuthentication",
+        "rest_framework.authentication.SessionAuthentication",
+    ],
     "DEFAULT_FILTER_BACKENDS": [
         "django_filters.rest_framework.DjangoFilterBackend",
         "rest_framework.filters.SearchFilter",
@@ -247,8 +252,6 @@ LOGGING = {
         # },
     }
 }
-
-print(json.dumps(LOGGING, indent=4))
 
 ENABLE_SQL_LOGGING = decouple.config("ENABLE_SQL_LOGGING", default=False, cast=bool)
 if ENABLE_SQL_LOGGING:
@@ -338,6 +341,7 @@ CRON_CLASSES = [
     "govapp.apps.catalogue.cron.SharepointScannerCronJob",
     "govapp.apps.catalogue.cron.DirectoryScannerCronJob",
     "govapp.apps.publisher.cron.PublishGeoServerQueueCronJob",
+    "govapp.apps.publisher.cron.PublishGeoServerReadyToPublishCronJob",
     "govapp.apps.publisher.cron.GeoServerLayerHealthcheckCronJob",
     "govapp.apps.publisher.cron.GeoServerSyncLayersCronJob", # layers
     "govapp.apps.publisher.cron.GeoServerSyncRulesCronJob", # rules
@@ -349,6 +353,15 @@ MANAGEMENT_COMMANDS_PAGE_ENABLED = decouple.config('MANAGEMENT_COMMANDS_PAGE_ENA
 
 # GeoServer Settings
 GEOSERVER_URL = decouple.config("GEOSERVER_URL", default="http://127.0.0.1:8600/geoserver")
+# Absolute path to the shared Docker volume as seen by GeoServer.
+# kb_geoserver_manager places converted GIS files here; KB uses this path
+# when calling the GeoServer REST API to configure path-based datastores.
+GEOSERVER_VOLUME_PATH = decouple.config("GEOSERVER_VOLUME_PATH", default="/opt/geoserver_data/data")
+# GeoServer data directory path (the root data directory, not the volume subdirectory).
+# When set, KB uses file:data/<relative> URL format instead of file:///<absolute> to avoid
+# GeoServer 2.23+ filesystem sandbox rejection of SMB/Azure File Share mounted paths.
+# Example: if volume path is /opt/geoserver_data/geoserver_data/data, data dir is /opt/geoserver_data
+GEOSERVER_DATA_DIR = decouple.config("GEOSERVER_DATA_DIR", default="/opt/geoserver_data")
 GEOSERVER_USERNAME = decouple.config("GEOSERVER_USERNAME", default="admin")
 GEOSERVER_PASSWORD = decouple.config("GEOSERVER_PASSWORD", default="geoserver")
 GEOSERVER_SECURITY_FILE_PATH=decouple.config("GEOSERVER_SECURITY_FILE_PATH", default="./config/geoserver_security/")

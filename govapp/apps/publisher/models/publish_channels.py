@@ -439,6 +439,41 @@ class GeoServerPublishChannel(mixins.RevisionedMixin):
         self.published_at = publish_time
         self.save()
 
+    def convert_layer(self) -> pathlib.Path:
+        """Converts the source layer file and returns the path to the file ready for transfer.
+
+        For GEOPACKAGE: performs the conversion and returns the converted .gpkg file path.
+        For GEOTIFF: returns the original source file path (no conversion needed).
+
+        Returns:
+            pathlib.Path: Path to the file to be transferred to the shared volume.
+
+        Raises:
+            FileNotFoundError: If the catalogue entry has no active layer.
+            ValueError: If the store_type is unknown.
+        """
+        if not self.publish_entry.catalogue_entry.active_layer:
+            msg = f'CatalogueEntry: [{self.publish_entry.catalogue_entry}] does not have an active_layer.'
+            log.error(msg)
+            raise FileNotFoundError(msg)
+
+        filepath = pathlib.Path(self.publish_entry.catalogue_entry.active_layer.file)
+
+        if self.store_type == StoreType.GEOPACKAGE:
+            log.info(f"Converting [{filepath}] to GeoPackage...")
+            geopackage = gis.conversions.to_geopackage(
+                filepath=filepath,
+                layer=self.publish_entry.catalogue_entry.metadata.name,
+                catalogue_name=self.publish_entry.catalogue_entry.name,
+                export_method='geoserver'
+            )
+            return pathlib.Path(geopackage['full_filepath'])
+        elif self.store_type == StoreType.GEOTIFF:
+            log.info(f"Store type is GEOTIFF; using original file: [{filepath}]")
+            return filepath
+        else:
+            raise ValueError(f'Unknown store_type: [{self.store_type}]')
+
     def publish_geoserver_symbology(self, geoserver: gis.geoserver.GeoServer) -> None:
         """Publishes the Symbology to GeoServer if applicable."""
         # Log

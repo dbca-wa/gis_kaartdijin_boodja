@@ -411,6 +411,295 @@ class GeoServer:
             log.error(f"An unexpected error occurred during upload for store '{layer}'. Details: {e}")
             raise
 
+    def _build_file_url(
+        self,
+        file_path: pathlib.Path,
+        geoserver_data_dir: Optional[pathlib.Path] = None,
+    ) -> str:
+        """Builds a GeoServer file URL for an external file reference.
+
+        When ``geoserver_data_dir`` is provided and ``file_path`` is under it, returns a
+        ``file:data/<relative>`` URL so that GeoServer resolves the path internally relative
+        to its data directory.  This bypasses the GeoServer 2.23+ filesystem sandbox
+        canonical-path check that rejects SMB/Azure File Share mounted paths.
+
+        Otherwise falls back to an absolute ``file://<path>`` URL.
+        """
+        if geoserver_data_dir is not None:
+            try:
+                rel = file_path.relative_to(geoserver_data_dir)
+                # GeoServer resolves "file:<rel>" relative to its data directory.
+                # e.g. file_path=/opt/geoserver_data/data/ws/name/f.tif,
+                # data_dir=/opt/geoserver_data → rel=data/ws/name/f.tif
+                # → URL: file:data/ws/name/f.tif  ("data/" is the actual subdir name)
+                return f"file:{rel}"
+            except ValueError:
+                log.warning(
+                    f"File path '{file_path}' is not under geoserver_data_dir "
+                    f"'{geoserver_data_dir}'; falling back to absolute file URL."
+                )
+        return f"file://{file_path}"
+
+    @handle_http_exceptions(log)
+    def configure_geopackage_from_path(
+        self,
+        workspace: str,
+        layer: str,
+        file_path_on_volume: pathlib.Path,
+        memory_map_size: Optional[int] = None,
+        geoserver_data_dir: Optional[pathlib.Path] = None,
+    ) -> None:
+        """Configures a GeoPackage datastore in GeoServer using a file already present on the
+        shared Docker volume (no HTTP file upload).
+
+        Uses the GeoServer catalog REST API in two steps (datastore creation then featuretype
+        creation) rather than the external.gpkg PUT endpoint.  The external.gpkg endpoint
+        triggers GeoServer 2.23+ sandbox canonical-path checks which reject SMB / Azure File
+        Share mounted paths even when the file URL is otherwise correct.  The catalog API
+        just writes configuration without touching the file, bypassing the check.
+
+        Args:
+            workspace: GeoServer workspace name.
+            layer: Datastore and layer name.
+            file_path_on_volume: Absolute path to the .gpkg file as seen by GeoServer
+                (i.e. the GeoServer-side mount path on the shared Docker volume).
+            memory_map_size: Optional memory map size parameter for large GeoPackage files.
+            geoserver_data_dir: GeoServer data directory root. When provided and the file
+                is under this directory, uses ``file:data/<relative>`` URL format to bypass
+                the GeoServer 2.23+ filesystem sandbox canonical-path check on SMB mounts.
+        """
+        log.info(
+            f"Configuring GeoPackage store '{layer}' in workspace '{workspace}' "
+            f"from volume path '{file_path_on_volume}'"
+        )
+
+        # Pre-flight cleanup: delete any stale layer and datastore so that
+        # creation of the new store is not blocked by an existing resource.
+        layer_delete_url = f"{self.service_url}/rest/layers/{workspace}:{layer}"
+        store_delete_url = (
+            f"{self.service_url}/rest/workspaces/{workspace}"
+            f"/datastores/{layer}?recurse=true"
+        )
+
+        try:
+            with requests.Session() as session:
+                session.auth = (self.username, self.password)
+
+                log.info(f"Attempting to delete layer (if it exists): {layer_delete_url}")
+                layer_del = session.delete(layer_delete_url, timeout=(15, 120))
+                if layer_del.status_code == 200:
+                    log.info(f"Deleted layer '{layer}'.")
+                elif layer_del.status_code == 404:
+                    log.info(f"Layer '{layer}' did not exist; nothing to delete.")
+                else:
+                    layer_del.raise_for_status()
+
+                log.info(f"Attempting to delete datastore (if it exists): {store_delete_url}")
+                store_del = session.delete(store_delete_url, timeout=(15, 120))
+                if store_del.status_code == 200:
+                    log.info(f"Deleted datastore '{layer}'.")
+                elif store_del.status_code == 404:
+                    log.info(f"Datastore '{layer}' did not exist; nothing to delete.")
+                else:
+                    store_del.raise_for_status()
+
+                log.info(f"Pre-flight cleanup complete for resource '{layer}'.")
+        except requests.exceptions.RequestException as e:
+            log.error(f"Pre-flight cleanup failed for resource '{layer}': {e}")
+            raise
+
+        # Configure the datastore using the catalog REST API (two-step: store then featuretype).
+        # We deliberately avoid the external.gpkg PUT endpoint because GeoServer 2.23+
+        # runs a sandbox canonical-path check on the file URL inside that handler, which
+        # rejects SMB / Azure File Share mounts even when the path is nominally correct.
+        # The catalog API just writes the store configuration without touching the file.
+        file_url = self._build_file_url(file_path_on_volume, geoserver_data_dir)
+        log.info(f"Using file URL: '{file_url}'")
+
+        datastores_url = (
+            f"{self.service_url}/rest/workspaces/{workspace}/datastores.json"
+        )
+        featuretype_url = (
+            f"{self.service_url}/rest/workspaces/{workspace}"
+            f"/datastores/{layer}/featuretypes.json"
+        )
+        store_payload = {
+            "dataStore": {
+                "name": layer,
+                "type": "GeoPackage",
+                "enabled": True,
+                "workspace": {"name": workspace},
+                "connectionParameters": {
+                    "entry": [
+                        {"@key": "database", "$": file_url},
+                        {"@key": "dbtype", "$": "geopkg"},
+                    ]
+                },
+            }
+        }
+        # nativeName must match the layer name written into the GeoPackage by ogr2ogr.
+        # The conversion always uses -nln <layer>, so nativeName == layer.
+        featuretype_payload = {
+            "featureType": {
+                "name": layer,
+                "nativeName": layer,
+            }
+        }
+
+        with requests.Session() as session:
+            session.auth = (self.username, self.password)
+
+            # Step 1: create the datastore (just writes catalog config, no file I/O).
+            log.info(f"Creating GeoPackage datastore via catalog API: {datastores_url}")
+            resp_store = session.post(
+                url=datastores_url,
+                json=store_payload,
+                timeout=60.0,
+            )
+            log.info(f"Datastore response: '{resp_store.status_code}: {resp_store.text}'")
+            resp_store.raise_for_status()
+
+            # Step 2: create the featuretype (layer) from the store.
+            log.info(f"Creating featuretype (layer) via catalog API: {featuretype_url}")
+            resp_ft = session.post(
+                url=featuretype_url,
+                json=featuretype_payload,
+                timeout=60.0,
+            )
+            log.info(f"Featuretype response: '{resp_ft.status_code}: {resp_ft.text}'")
+            resp_ft.raise_for_status()
+
+        if memory_map_size is not None:
+            try:
+                self._update_gpkg_datastore_params(workspace, layer, {"memory map size": str(memory_map_size)})
+            except Exception as e:
+                log.warning(
+                    f"GeoPackage store configured from path, but failed to update memory map size "
+                    f"for store '{layer}'. Please check manually. Error: {e}"
+                )
+
+    @handle_http_exceptions(log)
+    def configure_geotiff_from_path(
+        self,
+        workspace: str,
+        layer: str,
+        file_path_on_volume: pathlib.Path,
+        geoserver_data_dir: Optional[pathlib.Path] = None,
+    ) -> None:
+        """Configures a GeoTIFF coveragestore in GeoServer using a file already present on the
+        shared Docker volume (no HTTP file upload).
+
+        Mirrors the pre-flight cleanup logic from :meth:`upload_tif` so that any stale layer
+        or coveragestore is removed before the new one is created, then uses GeoServer's
+        external file reference API (PUT .../coveragestores/{store}/external.geotiff).
+
+        Args:
+            workspace: GeoServer workspace name.
+            layer: Coveragestore and layer name.
+            file_path_on_volume: Absolute path to the .tif file as seen by GeoServer
+                (i.e. the GeoServer-side mount path on the shared Docker volume).
+            geoserver_data_dir: GeoServer data directory root. When provided and the file
+                is under this directory, uses ``file:data/<relative>`` URL format to bypass
+                the GeoServer 2.23+ filesystem sandbox canonical-path check on SMB mounts.
+        """
+        log.info(
+            f"Configuring GeoTIFF store '{layer}' in workspace '{workspace}' "
+            f"from volume path '{file_path_on_volume}'"
+        )
+
+        # Pre-flight cleanup: delete any stale layer and coveragestore so that
+        # creation of the new store is not blocked by an existing resource.
+        layer_delete_url = f"{self.service_url}/rest/layers/{workspace}:{layer}"
+        store_delete_url = (
+            f"{self.service_url}/rest/workspaces/{workspace}"
+            f"/coveragestores/{layer}?recurse=true"
+        )
+
+        try:
+            with requests.Session() as session:
+                session.auth = (self.username, self.password)
+
+                log.info(f"Attempting to delete layer (if it exists): {layer_delete_url}")
+                layer_del = session.delete(layer_delete_url, timeout=(15, 120))
+                if layer_del.status_code == 200:
+                    log.info(f"Deleted layer '{layer}'.")
+                elif layer_del.status_code == 404:
+                    log.info(f"Layer '{layer}' did not exist; nothing to delete.")
+                else:
+                    layer_del.raise_for_status()
+
+                log.info(f"Attempting to delete coverage store (if it exists): {store_delete_url}")
+                store_del = session.delete(store_delete_url, timeout=(15, 120))
+                if store_del.status_code == 200:
+                    log.info(f"Deleted coverage store '{layer}'.")
+                elif store_del.status_code == 404:
+                    log.info(f"Coverage store '{layer}' did not exist; nothing to delete.")
+                else:
+                    store_del.raise_for_status()
+
+                log.info(f"Pre-flight cleanup complete for resource '{layer}'.")
+        except requests.exceptions.RequestException as e:
+            log.error(f"Pre-flight cleanup failed for resource '{layer}': {e}")
+            raise
+
+        # Configure the coveragestore using the catalog REST API (two-step: store then coverage).
+        # We deliberately avoid the external.geotiff PUT endpoint because GeoServer 2.23+
+        # runs a sandbox canonical-path check on the file URL inside that handler, which
+        # rejects SMB / Azure File Share mounts even when the path is nominally correct.
+        # The catalog API just writes the store configuration without touching the file.
+        file_url = self._build_file_url(file_path_on_volume, geoserver_data_dir)
+        log.info(f"Using file URL: '{file_url}'")
+
+        # POST to the collection URL creates a new store.
+        stores_url = (
+            # Ref: https://docs.geoserver.org/stable/en/user/rest/api/coveragestores.html
+            f"{self.service_url}/rest/workspaces/{workspace}/coveragestores.json"
+        )
+        coverage_url = (
+            # Ref: https://docs.geoserver.org/stable/en/user/rest/api/coverages.html
+            f"{self.service_url}/rest/workspaces/{workspace}/coveragestores/{layer}/coverages.json"
+        )
+        store_payload = {
+            "coverageStore": {
+                "name": layer,
+                "type": "GeoTIFF",
+                "enabled": True,
+                "workspace": {"name": workspace},
+                "url": file_url,
+            }
+        }
+        # nativeName must match the GeoTIFF's internal coverage name, which GeoServer
+        # derives from the filename stem (e.g. "Tiff-Test-20260319_15.20260319_155927...").
+        native_name = file_path_on_volume.stem
+        coverage_payload = {
+            "coverage": {
+                "name": layer,
+                "nativeName": native_name,
+            }
+        }
+
+        with requests.Session() as session:
+            session.auth = (self.username, self.password)
+
+            # Step 1: create the coverage store (just writes catalog config, no file I/O).
+            log.info(f"Creating coverage store via catalog API: {stores_url}")
+            resp_store = session.post(
+                url=stores_url,
+                json=store_payload,
+                timeout=60.0,
+            )
+            log.info(f"Coverage store response: '{resp_store.status_code}: {resp_store.text}'")
+            resp_store.raise_for_status()
+
+            # Step 2: create the coverage (layer) from the store.
+            log.info(f"Creating coverage (layer) via catalog API: {coverage_url}")
+            resp_coverage = session.post(
+                url=coverage_url,
+                json=coverage_payload,
+                timeout=60.0,
+            )
+            log.info(f"Coverage response: '{resp_coverage.status_code}: {resp_coverage.text}'")
+            resp_coverage.raise_for_status()
 
     @handle_http_exceptions(log)
     def create_layer_from_coveragestore(self, workspace: str, layer: str) -> None:

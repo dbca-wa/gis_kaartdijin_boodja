@@ -124,12 +124,18 @@ class LayerSubscription(mixins.RevisionedMixin):
         return f"{self.id}: {self.name}"
     
     def get_wms(self):
-        try:
-            wms = WebMapService(url=self.url, username=self.username, password=self.userpassword)
-            return wms
-        except Exception as e:
-            logger.error(f"Unable to connect to WMS: [{self.url}]: [{e}]")
-            raise
+        # Try WMS 1.1.1 first, then fall back to 1.3.0.
+        # Some servers (e.g. DEA) respond with WMS 1.3.0 capabilities which
+        # owslib's default 1.1.1 parser cannot handle, causing an AttributeError.
+        for version in ('1.1.1', '1.3.0'):
+            try:
+                wms = WebMapService(url=self.url, version=version, username=self.username, password=self.userpassword)
+                return wms
+            except Exception as e:
+                logger.warning(f"Unable to connect to WMS [{self.url}] with version {version}: [{e}]")
+                last_exc = e
+        logger.error(f"Unable to connect to WMS: [{self.url}]: [{last_exc}]")
+        raise last_exc
 
     def get_wfs(self):
         try:
