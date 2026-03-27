@@ -6,7 +6,7 @@ Provides three endpoints consumed exclusively by the kb_geoserver_manager servic
     GET  /api/geoserver-manager/layers/<pk>/download/  — stream the converted GIS file
     PATCH /api/geoserver-manager/layers/<pk>/          — update queue item status
 
-Authentication: HTTP Basic Auth (DRF BasicAuthentication).
+Authentication: handled by Auth2 (SSO proxy). DRF uses SessionAuthentication.
 """
 
 # Standard
@@ -16,7 +16,7 @@ import pathlib
 # Third-Party
 from django.http import StreamingHttpResponse
 from rest_framework import status, viewsets
-from rest_framework.authentication import BasicAuthentication
+from rest_framework.authentication import SessionAuthentication
 from rest_framework.decorators import action
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
@@ -64,7 +64,7 @@ class GeoServerManagerQueueViewSet(viewsets.GenericViewSet):
         queue_type=GeoServerQueueType.PUBLISH
     ).select_related("publish_entry").order_by("created_at")
     serializer_class = GeoServerManagerQueueSerializer
-    authentication_classes = [BasicAuthentication]
+    authentication_classes = [SessionAuthentication]
     permission_classes = [IsAuthenticated]
 
     def list(self, request):
