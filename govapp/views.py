@@ -444,6 +444,7 @@ class CatalogueEntriesView(base.TemplateView):
         context['CatalogueEntryType'] = catalogue_entries_models.CatalogueEntryType  # SPATIAL_FILE, SUBSCRIPTION_WFS, ...
         context['CatalogueEntryPermissionType'] = catalogue_entries_models.CatalogueEntryPermissionType  # NOT_RESTRICTED, RESTRICTED
         context['CatalogueEntryStatus'] = catalogue_entries_models.CatalogueEntryStatus  # NEW_DRAFT, LOCKED, ...
+        context['CatalogueEntryCRSType'] = catalogue_entries_models.CatalogueEntryCRSType  # GDA94, GDA2020
 
         # Render Template and Return
         return shortcuts.render(request, self.template_name, context)

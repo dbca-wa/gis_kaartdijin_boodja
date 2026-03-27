@@ -111,6 +111,25 @@
                         {% endif %}
                   </div>
             </div>
+            <div class="row mt-2">
+                  <div class='col-3'>Default CRS</div>
+                  <div class='col-5 p-1'>
+                        {% if has_edit_access %}
+                              <select class="form-control" id="catalogue-default-crs">
+                                    <option value="">-- No CRS check --</option>
+                                    {% for value, label in CatalogueEntryCRSType.choices %}
+                                          {% if catalogue_entry_obj.default_crs == value %}
+                                                <option value="{{ value }}" selected>{{ label }}</option>
+                                          {% else %}
+                                                <option value="{{ value }}">{{ label }}</option>
+                                          {% endif %}
+                                    {% endfor %}
+                              </select>
+                        {% else %}
+                              {{ catalogue_entry_obj.default_crs|default:"Not configured" }}
+                        {% endif %}
+                  </div>
+            </div>
       </div>
 </div>
 
