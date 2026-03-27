@@ -162,7 +162,10 @@ class Absorber:
         additional_data = utils.retrieve_additional_data(dataset)
         if self.is_projcs_unknown(additional_data['Projection']):
             logger.warning(f"SRS for file '{str(pathlib_filepath)}' is identified as 'unknown'.  This indicates the file lacks a standard EPSG identifier.")
-        
+
+        crs = utils.extract_epsg_from_wkt(additional_data.get('Projection', ''))
+        logger.info(f"CRS detected for file '{str(pathlib_filepath)}': [{crs}]")
+
         metadata = types.Metadata(
             name=utils.get_first_part_of_filename(pathlib_filepath),  # filename is like: State_Map_Base_FMS.20240606T015418.tif
             description="",  # Blank by Default
@@ -174,9 +177,9 @@ class Absorber:
 
         # Check existing catalogue entry
         if not catalogue_entry:
-            self.create_catalogue_entry(metadata, str(pathlib_filepath))
+            self.create_catalogue_entry(metadata, str(pathlib_filepath), crs=crs)
         else:
-            self.update_catalogue_entry(catalogue_entry, metadata, str(pathlib_filepath))
+            self.update_catalogue_entry(catalogue_entry, metadata, str(pathlib_filepath), crs=crs)
         
         # Clean up GDAL dataset
         dataset = None
@@ -250,11 +253,34 @@ class Absorber:
         # Here we specifically check the Layer Metadata name
         catalogue_entry = models.catalogue_entries.CatalogueEntry.objects.filter(name=metadata.name).first()
 
+        # Extract CRS from the OGR layer
+        crs = self._extract_crs_from_ogr_layer(layer.layer)
+        logger.info(f"CRS detected for layer '{layer.name}': [{crs}]")
+
         # Check existing catalogue entry
         if not catalogue_entry:
-            self.create_catalogue_entry(metadata, archive, attributes, symbology)
+            self.create_catalogue_entry(metadata, archive, attributes, symbology, crs=crs)
         else:
-            self.update_catalogue_entry(catalogue_entry, metadata, archive, attributes, symbology)
+            self.update_catalogue_entry(catalogue_entry, metadata, archive, attributes, symbology, crs=crs)
+
+    def _extract_crs_from_ogr_layer(self, ogr_layer) -> Optional[str]:
+        """Extracts the EPSG CRS string from an OGR layer's spatial reference.
+
+        Args:
+            ogr_layer: An osgeo.ogr.Layer object.
+
+        Returns:
+            Optional[str]: e.g. 'EPSG:7844', or None if not determinable.
+        """
+        try:
+            spatial_ref = ogr_layer.GetSpatialRef()
+            if spatial_ref is None:
+                return None
+            wkt = spatial_ref.ExportToWkt()
+            return utils.extract_epsg_from_wkt(wkt)
+        except Exception as exc:
+            logger.warning(f"Could not extract CRS from OGR layer: {exc}")
+            return None
 
     @transaction.atomic()
     def create_catalogue_entry(
@@ -263,6 +289,7 @@ class Absorber:
         archive: str,
         attributes: Optional[list[readers.types.Attribute]] = [],
         symbology: Optional[readers.types.Symbology] = None,
+        crs: Optional[str] = None,
     ) -> bool:
         """Creates a new catalogue entry with the supplied values.
 
@@ -303,7 +330,7 @@ class Absorber:
         geojson_path = '' if extension in self.ext_not_convert_to_geojson else self.convert_to_geojson(archive, catalogue_entry)
 
         # Create Layer Submission
-        self.create_layer_submission(metadata, archive, attributes_hash, attributes_str, catalogue_entry, geojson_path, True)
+        self.create_layer_submission(metadata, archive, attributes_hash, attributes_str, catalogue_entry, geojson_path, True, crs=crs)
 
         # Create Layer Metadata
         self.create_or_update_layer_metadata(metadata, catalogue_entry)
@@ -330,6 +357,7 @@ class Absorber:
         archive: str,
         attributes: Optional[list[readers.types.Attribute]] = [],
         symbology: Optional[readers.types.Symbology] = None,
+        crs: Optional[str] = None,
     ) -> bool:
         """Update a existing catalogue entry with the supplied values.
 
@@ -358,7 +386,18 @@ class Absorber:
         geojson_path = '' if extension in self.ext_not_convert_to_geojson else self.convert_to_geojson(archive, catalogue_entry)
 
         # Create New Layer Submission
-        layer_submission = self.create_layer_submission(metadata, archive, attributes_hash, attributes_str, catalogue_entry, geojson_path, False)
+        layer_submission = self.create_layer_submission(metadata, archive, attributes_hash, attributes_str, catalogue_entry, geojson_path, False, crs=crs)
+
+        # CRS validation: if the catalogue has a configured default_crs and the file's
+        # CRS is known but does not match, decline the submission immediately.
+        if catalogue_entry.default_crs and crs and catalogue_entry.default_crs != crs:
+            logger.warning(
+                f"CRS mismatch for CatalogueEntry [{catalogue_entry}]: "
+                f"expected '{catalogue_entry.default_crs}', got '{crs}'. Declining submission."
+            )
+            layer_submission.decline()
+            directory_notifications.catalogue_entry_update_failure(catalogue_entry)
+            return False
         
         # Create Layer Metadata
         self.create_or_update_layer_metadata(metadata, catalogue_entry)
@@ -400,7 +439,7 @@ class Absorber:
         # Return
         return success
 
-    def create_layer_submission(self, metadata, archive, attributes_hash, attributes_str, catalogue_entry, geojson_path, is_active):
+    def create_layer_submission(self, metadata, archive, attributes_hash, attributes_str, catalogue_entry, geojson_path, is_active, crs: Optional[str] = None):
         layer_submission = models.layer_submissions.LayerSubmission.objects.create(
             description=metadata.description,
             file=archive,
@@ -409,7 +448,8 @@ class Absorber:
             hash=attributes_hash,
             layer_attribute=attributes_str,
             catalogue_entry=catalogue_entry,
-            geojson=geojson_path
+            geojson=geojson_path,
+            crs=crs,
         )
         logger.info(f'LayerSubmission: [{layer_submission}] has been created for the CatalogueEntry: [{catalogue_entry}].')
         return layer_submission
