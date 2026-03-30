@@ -94,3 +94,10 @@ class CanAccessCDDP(BaseStaffSuperuserPermission):
         if utils.is_api_user(request.user):  # This conditional is specific to the CDDP.  We allow the windows script to access the CDDP
             return True
         return super().has_permission(request, view)
+
+
+class IsApiUser(permissions.BasePermission):
+    """Allow access only to authenticated users in the 'API User' group."""
+
+    def has_permission(self, request, view):
+        return request.user.is_authenticated and utils.is_api_user(request.user)
