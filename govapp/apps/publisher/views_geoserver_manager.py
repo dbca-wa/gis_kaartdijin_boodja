@@ -22,6 +22,7 @@ import pathlib
 from django.conf import settings
 from django.http import StreamingHttpResponse
 from rest_framework import status, viewsets
+from rest_framework.authentication import BaseAuthentication
 from rest_framework.decorators import action
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
@@ -39,6 +40,22 @@ from govapp.apps.publisher.serializers.geoserver_manager import (
 )
 
 log = logging.getLogger(__name__)
+
+
+class SSOMiddlewareAuthentication(BaseAuthentication):
+    """Trust the user already set on the underlying Django request by SSOLoginMiddleware.
+
+    Auth2 (authome) injects HTTP_REMOTE_USER and related headers before forwarding
+    requests to KB. SSOLoginMiddleware (from dbca_utils) processes those headers and
+    sets request.user on the Django request. This authenticator simply surfaces that
+    user to DRF so that permission classes can inspect it.
+    """
+
+    def authenticate(self, request):
+        user = request._request.user
+        if user and user.is_authenticated:
+            return (user, None)
+        return None
 
 _CHUNK_SIZE = 8 * 1024  # 8 KB
 
@@ -70,7 +87,7 @@ class GeoServerManagerQueueViewSet(viewsets.GenericViewSet):
         queue_type=GeoServerQueueType.PUBLISH
     ).select_related("publish_entry").order_by("created_at")
     serializer_class = GeoServerManagerQueueSerializer
-    authentication_classes = []
+    authentication_classes = [] if settings.DEBUG else [SSOMiddlewareAuthentication]
     permission_classes = [AllowAny] if settings.DEBUG else [IsApiUser]
 
     def list(self, request):
