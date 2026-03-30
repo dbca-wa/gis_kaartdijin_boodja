@@ -29,6 +29,7 @@ class LayerSubmissionSerializer(serializers.ModelSerializer):
             "catalogue_entry",
             "permission_type",
             "permission_type_str",
+            "crs",
         )
         read_only_fields = (
             "id",
@@ -44,6 +45,7 @@ class LayerSubmissionSerializer(serializers.ModelSerializer):
             "catalogue_entry",
             "permission_type",
             "permission_type_str",
+            "crs",
         )
 
     def get_submitted_at_str(self, obj):

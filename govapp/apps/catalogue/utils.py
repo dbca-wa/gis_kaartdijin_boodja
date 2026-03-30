@@ -154,3 +154,23 @@ def retrieve_additional_data(dataset):
     metadata_dict['Origin'] = (origin_x, origin_y)
 
     return metadata_dict
+
+
+def extract_epsg_from_wkt(wkt: str) -> Optional[str]:
+    """Extracts the EPSG authority code from a WKT projection string.
+
+    Args:
+        wkt (str): WKT projection string.
+
+    Returns:
+        Optional[str]: EPSG string e.g. 'EPSG:7844', or None if not determinable.
+    """
+    if not wkt:
+        return None
+    srs = osr.SpatialReference()
+    srs.ImportFromWkt(wkt)
+    authority = srs.GetAuthorityName(None)
+    code = srs.GetAuthorityCode(None)
+    if authority and code:
+        return f"{authority}:{code}"
+    return None

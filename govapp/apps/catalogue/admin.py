@@ -40,7 +40,7 @@ class CatalogueEntryAdmin(reversion.admin.VersionAdmin):
     # See: https://stackoverflow.com/questions/5385933/a-better-django-admin-manytomany-field-widget
     # filter_horizontal = ["editors"]
     search_fields = ('id', 'name', 'assigned_to__email', 'custodian__name', 'layer_subscription__name', 'mapping_name',)
-    list_display = ('id', 'name', 'get_status', 'type', 'permission_type', 'mapping_name', 'layer_subscription_link','custodian_link', 'assigned_to_link', 'get_active_layer', 'get_force_run_postgres_scanner', 'created_at', 'updated_at')
+    list_display = ('id', 'name', 'get_status', 'type', 'permission_type', 'default_crs', 'mapping_name', 'layer_subscription_link','custodian_link', 'assigned_to_link', 'get_active_layer', 'get_force_run_postgres_scanner', 'created_at', 'updated_at')
     list_filter = ('status', 'type', 'assigned_to', 'custodian', 'permission_type')
     list_display_links = ('id', 'name',)
     ordering = ('id',)

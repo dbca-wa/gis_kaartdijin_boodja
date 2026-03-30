@@ -6,7 +6,13 @@ Provides three endpoints consumed exclusively by the kb_geoserver_manager servic
     GET  /api/geoserver-manager/layers/<pk>/download/  — stream the converted GIS file
     PATCH /api/geoserver-manager/layers/<pk>/          — update queue item status
 
-Authentication: Token-based (DRF TokenAuthentication).
+Authentication:
+    Production (DEBUG=False): HTTP Basic Auth using a Django user account.
+        kb_geoserver_manager must send 'Authorization: Basic <base64(user:pass)>'
+        with every request. Configure credentials via environment variables in
+        kb_geoserver_manager.
+    Development (DEBUG=True): authentication is skipped (AllowAny) so that
+        kb_geoserver_manager can reach KB without credentials.
 """
 
 # Standard
@@ -14,11 +20,12 @@ import logging
 import pathlib
 
 # Third-Party
+from django.conf import settings
 from django.http import StreamingHttpResponse
 from rest_framework import status, viewsets
-from rest_framework.authentication import TokenAuthentication
+from rest_framework.authentication import BasicAuthentication
 from rest_framework.decorators import action
-from rest_framework.permissions import IsAuthenticated
+from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.response import Response
 
 # Local
@@ -64,8 +71,8 @@ class GeoServerManagerQueueViewSet(viewsets.GenericViewSet):
         queue_type=GeoServerQueueType.PUBLISH
     ).select_related("publish_entry").order_by("created_at")
     serializer_class = GeoServerManagerQueueSerializer
-    authentication_classes = [TokenAuthentication]
-    permission_classes = [IsAuthenticated]
+    authentication_classes = [] if settings.DEBUG else [BasicAuthentication]
+    permission_classes = [AllowAny] if settings.DEBUG else [IsAuthenticated]
 
     def list(self, request):
         """Return PUBLISH queue items, optionally filtered by ``?status=<int>``."""

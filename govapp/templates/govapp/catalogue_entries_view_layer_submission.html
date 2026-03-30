@@ -76,6 +76,13 @@
                         }
                     },
                     {
+                        "data": "crs",
+                        "title": "CRS",
+                        "render": function(data, type, row){
+                            return data ? data : '<span class="text-muted">Unknown</span>'
+                        }
+                    },
+                    {
                         "data": "id",
                         "title": "Action",
                         "render": function(data, type, row){

@@ -46,6 +46,7 @@ class LayerSubmission(mixins.RevisionedMixin):
     )
     layer_attribute = models.TextField(null=True, blank=True, help_text="This is the attribute data from the spatial file.")
     geojson = models.TextField(null=True, blank=True)
+    crs = models.CharField(max_length=64, null=True, blank=True, help_text="CRS of the submitted spatial file, e.g. 'EPSG:7844'.")
 
     class Meta:
         """Layer Submission Model Metadata."""

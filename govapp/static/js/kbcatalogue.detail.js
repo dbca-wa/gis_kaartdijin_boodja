@@ -71,13 +71,15 @@ var kbcatalogue_detail = {
         var cataloguename = $('#catalogue-entry-name').val();
         var cataloguecustodianentry = $('#catalogue-custodian-entry').val();
         var permission_type = $('#catalogue-permission-type').val();
+        var default_crs = $('#catalogue-default-crs').val();
         
         var cataloguedescription = $('#catalogue-entry-description').val();
         var post_data = {
             "name": cataloguename,
             "description": cataloguedescription,
             "custodian": cataloguecustodianentry,
-            "permission_type": permission_type
+            "permission_type": permission_type,
+            "default_crs": default_crs || null
         };
         var csrf_token = $("#csrfmiddlewaretoken").val();
         var pagetab = $('#pagetab').val();
