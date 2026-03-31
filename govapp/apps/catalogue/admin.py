@@ -122,7 +122,7 @@ class LayerMetadataAdmin(reversion.admin.VersionAdmin):
     
 class LayerSubmissionAdmin(reversion.admin.VersionAdmin):
     search_fields = ('id', 'catalogue_entry__name', 'file')
-    list_display = ('id', 'coloured_status', 'is_active', 'catalogue_entry_link', 'file', 'file_size', 'created_at', 'submitted_at', 'geojson',)
+    list_display = ('id', 'coloured_status', 'is_active', 'catalogue_entry_link', 'file', 'file_size', 'crs', 'created_at', 'submitted_at', 'geojson',)
     list_filter = ('status', 'is_active',)
     ordering = ('id',)
     raw_id_fields = ('catalogue_entry',)
