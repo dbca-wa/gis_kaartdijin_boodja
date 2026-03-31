@@ -95,11 +95,11 @@ class Absorber:
         # Check existing catalogue entry
         if not catalogue_entry:
             # Create
-            self.create_catalogue_entry(metadata, attributes, symbology, archive)
+            self.create_catalogue_entry(metadata, attributes, symbology, archive, filepath.stat().st_size)
 
         else:
             # Update
-            self.update_catalogue_entry(catalogue_entry, metadata, attributes, symbology, archive)
+            self.update_catalogue_entry(catalogue_entry, metadata, attributes, symbology, archive, filepath.stat().st_size)
 
     @transaction.atomic()
     def create_catalogue_entry(
@@ -108,6 +108,7 @@ class Absorber:
         attributes: list[readers.types.Attribute],
         symbology: readers.types.Symbology,
         archive: str,
+        file_size: int = None,
     ) -> bool:
         """Creates a new catalogue entry with the supplied values.
 
@@ -137,6 +138,7 @@ class Absorber:
         models.layer_submissions.LayerSubmission.objects.create(
             description=metadata.description,
             file=archive,
+            file_size=file_size,
             is_active=True,  # Active!
             created_at=metadata.created_at,
             hash=attributes_hash,
@@ -179,6 +181,7 @@ class Absorber:
         attributes: list[readers.types.Attribute],
         symbology: readers.types.Symbology,
         archive: str,
+        file_size: int = None,
     ) -> bool:
         """Creates a new catalogue entry with the supplied values.
 
@@ -202,6 +205,7 @@ class Absorber:
         layer_submission = models.layer_submissions.LayerSubmission.objects.create(
             description=metadata.description,
             file=archive,
+            file_size=file_size,
             is_active=False,  # Starts out Inactive
             created_at=metadata.created_at,
             hash=attributes_hash,
