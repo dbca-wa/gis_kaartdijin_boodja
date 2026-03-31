@@ -440,9 +440,15 @@ class Absorber:
         return success
 
     def create_layer_submission(self, metadata, archive, attributes_hash, attributes_str, catalogue_entry, geojson_path, is_active, crs: Optional[str] = None):
+        file_size = None
+        try:
+            file_size = pathlib.Path(archive).stat().st_size
+        except (OSError, ValueError):
+            pass
         layer_submission = models.layer_submissions.LayerSubmission.objects.create(
             description=metadata.description,
             file=archive,
+            file_size=file_size,
             is_active=is_active,  # Active!
             created_at=metadata.created_at,
             hash=attributes_hash,
