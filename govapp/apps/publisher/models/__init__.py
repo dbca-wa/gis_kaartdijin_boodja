@@ -7,3 +7,4 @@ from . import workspaces
 from . import geoserver_pools
 from . import geoserver_queues
 from . import geoserver_roles_groups
+from . import geoserver_layer_groups
