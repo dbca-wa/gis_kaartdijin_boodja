@@ -49,6 +49,8 @@ class SSOMiddlewareAuthentication(BaseAuthentication):
     requests to KB. SSOLoginMiddleware (from dbca_utils) processes those headers and
     sets request.user on the Django request. This authenticator simply surfaces that
     user to DRF so that permission classes can inspect it.
+
+    Ref: https://www.django-rest-framework.org/api-guide/authentication/#how-authentication-is-determined
     """
 
     def authenticate(self, request):
@@ -87,7 +89,7 @@ class GeoServerManagerQueueViewSet(viewsets.GenericViewSet):
         queue_type=GeoServerQueueType.PUBLISH
     ).select_related("publish_entry").order_by("created_at")
     serializer_class = GeoServerManagerQueueSerializer
-    authentication_classes = [] if settings.DEBUG else [SSOMiddlewareAuthentication]
+    authentication_classes = [] if settings.DEBUG else [SSOMiddlewareAuthentication]  # Ref: https://www.django-rest-framework.org/api-guide/authentication/#how-authentication-is-determined
     permission_classes = [AllowAny] if settings.DEBUG else [IsApiUser]
 
     def list(self, request):
