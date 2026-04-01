@@ -277,7 +277,7 @@ class GeoServerQueueSerializer(serializers.ModelSerializer):
             return status_label_map.get(obj.status, obj.status)
         for status in models.geoserver_queues.GeoServerQueueStatus:
             if status == obj.status:
-                return status.name
+                return status.label
 
     def get_queue_type(self, obj):
         for queue_type in models.geoserver_queues.GeoServerQueueType:

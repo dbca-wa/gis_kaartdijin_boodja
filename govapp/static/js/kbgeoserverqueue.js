@@ -35,8 +35,8 @@ var kbgeoserverweb = {
                     'PURGE_CACHE': 'Purge Cache',
                 };
                 for(let i in response.results){
-                    const failed_statuses = ['FAILED', 'PUBLISH_FAILED', 'UPLOAD_FAILED'];
-                    const success_statuses = ['PUBLISHED', 'PURGED'];
+                    const failed_statuses = ['Conversion Failed', 'Publication Failed', 'Transfer Failed', 'FAILED'];
+                    const success_statuses = ['Published', 'PURGED'];
                     if(failed_statuses.includes(response.results[i].status)) response.results[i].success = false;
                     else if(success_statuses.includes(response.results[i].status)) response.results[i].success = true;
                     else response.results[i].success = null;

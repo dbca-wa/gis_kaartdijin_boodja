@@ -21,15 +21,15 @@ if TYPE_CHECKING:
 UserModel = auth.get_user_model()
 
 class GeoServerQueueStatus(models.IntegerChoices):
-    READY = 0
-    PROCESSING = 1
-    PUBLISHED = 2
-    FAILED = 3
-    CONVERTED = 4
-    UPLOAD_IN_PROGRESS = 5
-    UPLOAD_FAILED = 6
-    READY_TO_PUBLISH = 7
-    PUBLISH_FAILED = 8
+    READY = 0, "Queued"
+    PROCESSING = 1, "Converting"
+    PUBLISHED = 2, "Published"
+    FAILED = 3, "Conversion Failed"
+    CONVERTED = 4, "Awaiting Transfer"
+    UPLOAD_IN_PROGRESS = 5, "Transferring"
+    UPLOAD_FAILED = 6, "Transfer Failed"
+    READY_TO_PUBLISH = 7, "Awaiting Publication"
+    PUBLISH_FAILED = 8, "Publication Failed"
 
 
 class GeoServerQueueType(models.IntegerChoices):

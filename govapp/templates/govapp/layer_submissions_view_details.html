@@ -16,6 +16,14 @@
                   <div class='col-3'>Submitted Datetime</div>
                   <div class='col-9 p-1'> {{ layer_submission_obj.submit_datetime }}</div>
             </div>
+            <div class='row'>
+                  <div class='col-3'>File size</div>
+                  <div class='col-9 p-1'>{% if layer_submission_obj.file_size %}{{ layer_submission_obj.file_size|filesizeformat }}{% else %}---{% endif %}</div>
+            </div>
+            <div class='row'>
+                  <div class='col-3'>CRS</div>
+                  <div class='col-9 p-1'>{{ layer_submission_obj.crs|default:"---" }}</div>
+            </div>
             {% if accessible_to_download %}
             <div class='row'>
                   <div class='col-3'>Link to file</div>
