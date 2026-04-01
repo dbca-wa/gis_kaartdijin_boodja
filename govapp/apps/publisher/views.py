@@ -42,6 +42,9 @@ from govapp.apps.publisher import permissions
 from govapp.apps.publisher import serializers
 from govapp.apps.publisher import geoserver_manager
 from govapp.apps.publisher.models.geoserver_queues import GeoServerQueueStatus
+from govapp.apps.publisher.models.geoserver_layer_groups import GeoServerLayerGroup
+from govapp.apps.publisher.serializers.geoserver_layer_group import GeoServerLayerGroupSerializer
+from govapp.apps.publisher import geoserver_layergroup_publisher
 
 # Typing
 from typing import cast, Any
@@ -1298,6 +1301,54 @@ class GeoServerGroupViewSet(
                 
         except Exception as e:
             return Response({"error": f"An error occurred while updating the group: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class GeoServerLayerGroupViewSet(
+    viewsets.mixins.CreateModelMixin,
+    viewsets.mixins.DestroyModelMixin,
+    viewsets.mixins.RetrieveModelMixin,
+    viewsets.mixins.ListModelMixin,
+    viewsets.mixins.UpdateModelMixin,
+    viewsets.GenericViewSet,
+):
+    """ViewSet for managing GeoServer Layer Groups."""
+
+    queryset = GeoServerLayerGroup.objects.select_related(
+        "workspace", "geoserver_pool"
+    ).prefetch_related("entries__publish_channel__workspace")
+    serializer_class = GeoServerLayerGroupSerializer
+    permission_classes = [accounts_permissions.CanAccessOptionMenu]
+    pagination_class = DatatablesPageNumberPagination
+    renderer_classes = [DatatablesRenderer, JSONRenderer]
+    filter_backends = [rest_filters.SearchFilter]
+    search_fields = ["name", "title", "workspace__name", "geoserver_pool__name"]
+
+    def destroy(self, request, *args, **kwargs):
+        """Delete layer group from GeoServer before removing from the database."""
+        layer_group = self.get_object()
+        success, exc = geoserver_layergroup_publisher.delete_from_geoserver(layer_group)
+        if not success:
+            return Response(
+                {"error": f"Failed to remove layer group from GeoServer: {exc}"},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+        layer_group.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=True, methods=["post"])
+    def publish(self, request, pk=None):
+        """Publish the layer group to GeoServer."""
+        layer_group = self.get_object()
+        success, exc = geoserver_layergroup_publisher.publish(layer_group)
+        if not success:
+            return Response(
+                {"error": f"Failed to publish layer group: {exc}"},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+        # Refresh from DB so published_name is current in the response.
+        layer_group.refresh_from_db()
+        serializer = self.get_serializer(layer_group)
+        return Response(serializer.data)
 
 
 class GeoServerLayerHealthcheckViewSet(viewsets.ReadOnlyModelViewSet):
