@@ -1351,6 +1351,26 @@ class GeoServerLayerGroupViewSet(
         return Response(serializer.data)
 
 
+class GeoServerLayerGroupEntryViewSet(
+    viewsets.mixins.CreateModelMixin,
+    viewsets.mixins.DestroyModelMixin,
+    viewsets.mixins.UpdateModelMixin,
+    viewsets.GenericViewSet,
+):
+    """ViewSet for managing individual GeoServerLayerGroupEntry records.
+
+    Used by the frontend to create, update (order), and delete member entries
+    without going through the parent group endpoint.
+    """
+
+    from govapp.apps.publisher.models.geoserver_layer_groups import GeoServerLayerGroupEntry
+    from govapp.apps.publisher.serializers.geoserver_layer_group import GeoServerLayerGroupEntrySerializer
+
+    queryset = GeoServerLayerGroupEntry.objects.all()
+    serializer_class = GeoServerLayerGroupEntrySerializer
+    permission_classes = [accounts_permissions.CanAccessOptionMenu]
+
+
 class GeoServerLayerHealthcheckViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = models.publish_channels.GeoServerLayerHealthcheck.objects.all()
     serializer_class = serializers.publish_channels.GeoServerLayerHealthcheckSerializer

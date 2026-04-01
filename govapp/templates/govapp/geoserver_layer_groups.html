@@ -1,0 +1,502 @@
+{% extends 'govapp/base.html' %}
+{% block content %}
+{% if request.user.is_authenticated is True %}
+    <input type="hidden" id="csrfmiddlewaretoken" name="csrfmiddlewaretoken" value="{{ csrf_token }}">
+
+    <div class="container" id="dashboard-table-container">
+        <div class="card">
+            <div class="card-header fw-bold h4" style="padding:30px;">
+                <div class="row">
+                    <div class="col-6">GeoServer Layer Groups</div>
+                    <div class="col-6 text-end">
+                        <i class="bi fw-bold chevron-toggle down-chevron-open" data-bs-target="#box1-card-body" onclick=""></i>
+                    </div>
+                </div>
+            </div>
+            <div class="card-body collapse show" id="box1-card-body">
+                <div class="row mb-3">
+                    <div class="col-12 text-end">
+                        <button id="btnCreateLayerGroup" class="btn btn-primary">Create Layer Group</button>
+                    </div>
+                </div>
+                <table id="layerGroupTable" class="table table-striped table-bordered table-hover my-2" style="width:100%">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Name</th>
+                            <th>Title</th>
+                            <th>Workspace</th>
+                            <th>GeoServer Pool</th>
+                            <th>Published Name</th>
+                            <th>Active</th>
+                            <th>Updated</th>
+                            <th>Actions</th>
+                        </tr>
+                    </thead>
+                </table>
+            </div>
+        </div>
+    </div>
+
+    <!-- Create / Edit Modal -->
+    <div class="modal fade" id="layerGroupModal" tabindex="-1" aria-labelledby="layerGroupModalLabel" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="layerGroupModalLabel">Create Layer Group</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <input type="hidden" id="modalLayerGroupId" value="">
+                    <div class="row mb-3">
+                        <div class="col-6">
+                            <label class="form-label">Name <span class="text-danger">*</span></label>
+                            <input type="text" class="form-control" id="modalName">
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label">Title</label>
+                            <input type="text" class="form-control" id="modalTitle">
+                        </div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-12">
+                            <label class="form-label">Abstract</label>
+                            <textarea class="form-control" id="modalAbstract" rows="2"></textarea>
+                        </div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-6">
+                            <label class="form-label">Workspace <span class="text-danger">*</span></label>
+                            <select class="form-select" id="modalWorkspace">
+                                <option value="">-- Select --</option>
+                                {% for ws in workspaces %}
+                                <option value="{{ ws.id }}">{{ ws.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                        <div class="col-6">
+                            <label class="form-label">GeoServer Pool <span class="text-danger">*</span></label>
+                            <select class="form-select" id="modalPool">
+                                <option value="">-- Select --</option>
+                                {% for pool in geoserver_pools %}
+                                <option value="{{ pool.id }}">{{ pool.name }}</option>
+                                {% endfor %}
+                            </select>
+                        </div>
+                    </div>
+                    <div class="row mb-3">
+                        <div class="col-6">
+                            <label class="form-label">Active</label>
+                            <div class="form-check form-switch mt-1">
+                                <input class="form-check-input" type="checkbox" id="modalActive" checked>
+                            </div>
+                        </div>
+                    </div>
+                    <hr>
+                    <h6>Member Layers</h6>
+                    <p class="text-muted small">Add GeoServer Publish Channels as member layers. Use the arrows to adjust rendering order.</p>
+                    <div id="memberList" class="mb-3"></div>
+                    <button type="button" class="btn btn-outline-secondary btn-sm" id="btnAddEntry">+ Add Layer</button>
+                    <!-- Entry add row (hidden) -->
+                    <div id="entryAddRow" class="row mt-2 d-none">
+                        <div class="col-8">
+                            <select class="form-select form-select-sm" id="entryChannelSelect">
+                                <option value="">-- Select Publish Channel --</option>
+                            </select>
+                        </div>
+                        <div class="col-4">
+                            <button type="button" class="btn btn-primary btn-sm" id="btnConfirmAddEntry">Add</button>
+                            <button type="button" class="btn btn-secondary btn-sm" id="btnCancelAddEntry">Cancel</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                    <button type="button" class="btn btn-primary" id="btnSaveLayerGroup">Save</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Feedback Modal -->
+    {% include "govapp/feedback_modal.html" %}
+
+    <!-- Confirmation Modal -->
+    {% include "govapp/confirmation_modal.html" %}
+
+    <!-- datatables -->
+    <link href="/static/common/css/datatables.css" rel="stylesheet" />
+    <script src="/static/common/js/datatables.min.js?ver={{ GIT_COMMIT_HASH }}"></script>
+
+    <script>
+        const CSRF_TOKEN = document.getElementById('csrfmiddlewaretoken').value;
+        const API_BASE = '/api/publish/channels/geoserver-layer-groups/';
+        const CHANNELS_API = '/api/publish/channels/geoserver/';
+
+        let table = null;
+        let editingEntries = [];   // [{publish_channel, publish_channel_name, order, id (optional)}]
+        let pendingDeleteId = null;
+
+        // ── Helpers ──────────────────────────────────────────────────────────
+
+        function showFeedback(msg, isError) {
+            const el = document.getElementById('feedback-modal-text');
+            if (el) el.textContent = msg;
+            const modal = new bootstrap.Modal(document.getElementById('feedbackModal'));
+            modal.show();
+        }
+
+        // ── DataTable ────────────────────────────────────────────────────────
+
+        function buildTable() {
+            table = $('#layerGroupTable').DataTable({
+                processing: true,
+                serverSide: true,
+                ajax: {
+                    url: API_BASE,
+                    type: 'GET',
+                    data: function(d) {
+                        d.page = (d.start / d.length) + 1;
+                        d.page_size = d.length;
+                        d.search = d.search.value;
+                    },
+                    dataSrc: function(json) { return json.data; }
+                },
+                columns: [
+                    { data: 'id', width: '50px' },
+                    { data: 'name' },
+                    { data: 'title', defaultContent: '' },
+                    { data: 'workspace_name' },
+                    { data: 'geoserver_pool_name' },
+                    {
+                        data: 'published_name',
+                        render: function(data) {
+                            return data
+                                ? '<span class="badge bg-success">' + data + '</span>'
+                                : '<span class="badge bg-secondary">Not published</span>';
+                        }
+                    },
+                    {
+                        data: 'active',
+                        className: 'text-center',
+                        render: function(data) {
+                            return data
+                                ? '<span class="badge bg-success">Active</span>'
+                                : '<span class="badge bg-secondary">Inactive</span>';
+                        }
+                    },
+                    { data: 'updated_at' },
+                    {
+                        data: null,
+                        orderable: false,
+                        render: function(data, type, row) {
+                            return '<button class="btn btn-sm btn-outline-primary me-1 btn-edit" data-id="' + row.id + '">Edit</button>'
+                                 + '<button class="btn btn-sm btn-success me-1 btn-publish" data-id="' + row.id + '">Publish</button>'
+                                 + '<button class="btn btn-sm btn-danger btn-delete" data-id="' + row.id + '">Delete</button>';
+                        }
+                    }
+                ]
+            });
+
+            // Row action delegation
+            $('#layerGroupTable').on('click', '.btn-edit', function() {
+                openEditModal($(this).data('id'));
+            });
+            $('#layerGroupTable').on('click', '.btn-publish', function() {
+                publishGroup($(this).data('id'));
+            });
+            $('#layerGroupTable').on('click', '.btn-delete', function() {
+                pendingDeleteId = $(this).data('id');
+                document.getElementById('confirmation-modal-text').textContent =
+                    'Are you sure you want to delete this layer group? It will also be removed from GeoServer.';
+                new bootstrap.Modal(document.getElementById('confirmationModal')).show();
+            });
+        }
+
+        // ── Member entry list rendering ───────────────────────────────────────
+
+        function renderMemberList() {
+            const container = document.getElementById('memberList');
+            if (editingEntries.length === 0) {
+                container.innerHTML = '<p class="text-muted small">No members yet.</p>';
+                return;
+            }
+            let html = '<ul class="list-group" id="sortable-entries">';
+            editingEntries.forEach(function(e, idx) {
+                html += '<li class="list-group-item d-flex justify-content-between align-items-center" data-idx="' + idx + '">'
+                      + '<span>' + e.publish_channel_name + ' <small class="text-muted">(order: ' + e.order + ')</small></span>'
+                      + '<span>'
+                      + (idx > 0 ? '<button class="btn btn-sm btn-outline-secondary me-1 btn-move-up" data-idx="' + idx + '">▲</button>' : '')
+                      + (idx < editingEntries.length - 1 ? '<button class="btn btn-sm btn-outline-secondary me-1 btn-move-down" data-idx="' + idx + '">▼</button>' : '')
+                      + '<button class="btn btn-sm btn-outline-danger btn-remove-entry" data-idx="' + idx + '">✕</button>'
+                      + '</span>'
+                      + '</li>';
+            });
+            html += '</ul>';
+            container.innerHTML = html;
+
+            container.querySelectorAll('.btn-move-up').forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    const i = parseInt(btn.dataset.idx);
+                    const tmp = editingEntries[i - 1];
+                    editingEntries[i - 1] = editingEntries[i];
+                    editingEntries[i] = tmp;
+                    reOrderEntries();
+                    renderMemberList();
+                });
+            });
+            container.querySelectorAll('.btn-move-down').forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    const i = parseInt(btn.dataset.idx);
+                    const tmp = editingEntries[i + 1];
+                    editingEntries[i + 1] = editingEntries[i];
+                    editingEntries[i] = tmp;
+                    reOrderEntries();
+                    renderMemberList();
+                });
+            });
+            container.querySelectorAll('.btn-remove-entry').forEach(function(btn) {
+                btn.addEventListener('click', function() {
+                    editingEntries.splice(parseInt(btn.dataset.idx), 1);
+                    reOrderEntries();
+                    renderMemberList();
+                });
+            });
+        }
+
+        function reOrderEntries() {
+            editingEntries.forEach(function(e, idx) { e.order = idx; });
+        }
+
+        // ── Modal helpers ─────────────────────────────────────────────────────
+
+        function resetModal() {
+            document.getElementById('layerGroupModalLabel').textContent = 'Create Layer Group';
+            document.getElementById('modalLayerGroupId').value = '';
+            document.getElementById('modalName').value = '';
+            document.getElementById('modalTitle').value = '';
+            document.getElementById('modalAbstract').value = '';
+            document.getElementById('modalWorkspace').value = '';
+            document.getElementById('modalPool').value = '';
+            document.getElementById('modalActive').checked = true;
+            editingEntries = [];
+            renderMemberList();
+            document.getElementById('entryAddRow').classList.add('d-none');
+        }
+
+        function openEditModal(id) {
+            fetch(API_BASE + id + '/')
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    document.getElementById('layerGroupModalLabel').textContent = 'Edit Layer Group';
+                    document.getElementById('modalLayerGroupId').value = data.id;
+                    document.getElementById('modalName').value = data.name;
+                    document.getElementById('modalTitle').value = data.title || '';
+                    document.getElementById('modalAbstract').value = data.abstract || '';
+                    document.getElementById('modalWorkspace').value = data.workspace;
+                    document.getElementById('modalPool').value = data.geoserver_pool;
+                    document.getElementById('modalActive').checked = data.active;
+                    editingEntries = (data.entries || []).map(function(e) {
+                        return {
+                            id: e.id,
+                            publish_channel: e.publish_channel,
+                            publish_channel_name: e.publish_channel_name,
+                            order: e.order
+                        };
+                    });
+                    renderMemberList();
+                    new bootstrap.Modal(document.getElementById('layerGroupModal')).show();
+                });
+        }
+
+        // ── Save (create or update) ───────────────────────────────────────────
+
+        function saveLayerGroup() {
+            const id = document.getElementById('modalLayerGroupId').value;
+            const payload = {
+                name: document.getElementById('modalName').value.trim(),
+                title: document.getElementById('modalTitle').value.trim() || null,
+                abstract: document.getElementById('modalAbstract').value.trim() || null,
+                workspace: parseInt(document.getElementById('modalWorkspace').value) || null,
+                geoserver_pool: parseInt(document.getElementById('modalPool').value) || null,
+                active: document.getElementById('modalActive').checked,
+            };
+
+            const url = id ? API_BASE + id + '/' : API_BASE;
+            const method = id ? 'PUT' : 'POST';
+
+            fetch(url, {
+                method: method,
+                headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
+                body: JSON.stringify(payload)
+            })
+            .then(function(r) {
+                if (!r.ok) return r.json().then(function(e) { throw e; });
+                return r.json();
+            })
+            .then(function(savedGroup) {
+                // Sync entries server-side: delete removed, create added
+                return syncEntries(savedGroup.id);
+            })
+            .then(function() {
+                bootstrap.Modal.getInstance(document.getElementById('layerGroupModal')).hide();
+                table.ajax.reload();
+                showFeedback('Layer group saved successfully.');
+            })
+            .catch(function(err) {
+                showFeedback('Error: ' + JSON.stringify(err), true);
+            });
+        }
+
+        function syncEntries(groupId) {
+            // Fetch current server-side entries then reconcile with editingEntries.
+            return fetch(API_BASE + groupId + '/')
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    const serverEntries = data.entries || [];
+                    const serverIds = serverEntries.map(function(e) { return e.id; });
+                    const localIds = editingEntries.filter(function(e) { return e.id; }).map(function(e) { return e.id; });
+
+                    // Delete entries removed by the user
+                    const toDelete = serverIds.filter(function(sid) { return !localIds.includes(sid); });
+                    const deletePromises = toDelete.map(function(eid) {
+                        return fetch('/api/publish/channels/geoserver-layer-group-entries/' + eid + '/', {
+                            method: 'DELETE',
+                            headers: { 'X-CSRFToken': CSRF_TOKEN }
+                        });
+                    });
+
+                    // Create new entries (those without an id)
+                    const toCreate = editingEntries.filter(function(e) { return !e.id; });
+                    const createPromises = toCreate.map(function(e) {
+                        return fetch('/api/publish/channels/geoserver-layer-group-entries/', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
+                            body: JSON.stringify({
+                                layer_group: groupId,
+                                publish_channel: e.publish_channel,
+                                order: e.order
+                            })
+                        });
+                    });
+
+                    // Update order of existing entries that changed
+                    const toUpdate = editingEntries.filter(function(e) { return e.id; });
+                    const updatePromises = toUpdate.map(function(e) {
+                        return fetch('/api/publish/channels/geoserver-layer-group-entries/' + e.id + '/', {
+                            method: 'PATCH',
+                            headers: { 'Content-Type': 'application/json', 'X-CSRFToken': CSRF_TOKEN },
+                            body: JSON.stringify({ order: e.order })
+                        });
+                    });
+
+                    return Promise.all([...deletePromises, ...createPromises, ...updatePromises]);
+                });
+        }
+
+        // ── Publish ───────────────────────────────────────────────────────────
+
+        function publishGroup(id) {
+            fetch(API_BASE + id + '/publish/', {
+                method: 'POST',
+                headers: { 'X-CSRFToken': CSRF_TOKEN }
+            })
+            .then(function(r) {
+                if (!r.ok) return r.json().then(function(e) { throw e; });
+                return r.json();
+            })
+            .then(function() {
+                table.ajax.reload();
+                showFeedback('Layer group published successfully.');
+            })
+            .catch(function(err) {
+                showFeedback('Publish failed: ' + JSON.stringify(err), true);
+            });
+        }
+
+        // ── Delete ────────────────────────────────────────────────────────────
+
+        function deleteGroup(id) {
+            fetch(API_BASE + id + '/', {
+                method: 'DELETE',
+                headers: { 'X-CSRFToken': CSRF_TOKEN }
+            })
+            .then(function(r) {
+                if (!r.ok && r.status !== 204) return r.json().then(function(e) { throw e; });
+                table.ajax.reload();
+                showFeedback('Layer group deleted.');
+            })
+            .catch(function(err) {
+                showFeedback('Delete failed: ' + JSON.stringify(err), true);
+            });
+        }
+
+        // ── Publish channel dropdown ──────────────────────────────────────────
+
+        function loadChannels() {
+            fetch(CHANNELS_API + '?page_size=1000')
+                .then(function(r) { return r.json(); })
+                .then(function(data) {
+                    const select = document.getElementById('entryChannelSelect');
+                    (data.results || data.data || []).forEach(function(ch) {
+                        const opt = document.createElement('option');
+                        opt.value = ch.id;
+                        opt.textContent = ch.name || (ch.workspace_name + ':' + ch.layer_name);
+                        select.appendChild(opt);
+                    });
+                });
+        }
+
+        // ── Event wiring ──────────────────────────────────────────────────────
+
+        document.addEventListener('DOMContentLoaded', function() {
+            buildTable();
+            loadChannels();
+
+            document.getElementById('btnCreateLayerGroup').addEventListener('click', function() {
+                resetModal();
+                new bootstrap.Modal(document.getElementById('layerGroupModal')).show();
+            });
+
+            document.getElementById('btnSaveLayerGroup').addEventListener('click', saveLayerGroup);
+
+            document.getElementById('btnAddEntry').addEventListener('click', function() {
+                document.getElementById('entryAddRow').classList.remove('d-none');
+            });
+
+            document.getElementById('btnCancelAddEntry').addEventListener('click', function() {
+                document.getElementById('entryAddRow').classList.add('d-none');
+                document.getElementById('entryChannelSelect').value = '';
+            });
+
+            document.getElementById('btnConfirmAddEntry').addEventListener('click', function() {
+                const select = document.getElementById('entryChannelSelect');
+                const channelId = parseInt(select.value);
+                if (!channelId) return;
+                const alreadyAdded = editingEntries.some(function(e) { return e.publish_channel === channelId; });
+                if (alreadyAdded) {
+                    alert('This channel is already in the group.');
+                    return;
+                }
+                editingEntries.push({
+                    publish_channel: channelId,
+                    publish_channel_name: select.options[select.selectedIndex].textContent,
+                    order: editingEntries.length
+                });
+                renderMemberList();
+                document.getElementById('entryAddRow').classList.add('d-none');
+                select.value = '';
+            });
+
+            // Confirmation modal confirm button
+            document.getElementById('confirm-modal-confirm-btn') && document.getElementById('confirm-modal-confirm-btn').addEventListener('click', function() {
+                if (pendingDeleteId) {
+                    deleteGroup(pendingDeleteId);
+                    pendingDeleteId = null;
+                }
+                bootstrap.Modal.getInstance(document.getElementById('confirmationModal')).hide();
+            });
+        });
+    </script>
+{% endif %}
+{% endblock %}
