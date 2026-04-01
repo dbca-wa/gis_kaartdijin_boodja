@@ -133,7 +133,7 @@
         const API_BASE = '/api/publish/channels/geoserver-layer-groups/';
         const CHANNELS_API = '/api/publish/channels/geoserver/';
 
-        let table = null;
+        let lgTable = null;
         let editingEntries = [];   // [{publish_channel, publish_channel_name, order, id (optional)}]
         let pendingDeleteId = null;
 
@@ -149,7 +149,7 @@
         // ── DataTable ────────────────────────────────────────────────────────
 
         function buildTable() {
-            table = $('#layerGroupTable').DataTable({
+            lgTable = $('#layerGroupTable').DataTable({
                 processing: true,
                 serverSide: true,
                 ajax: {
@@ -340,7 +340,7 @@
             })
             .then(function() {
                 bootstrap.Modal.getInstance(document.getElementById('layerGroupModal')).hide();
-                table.ajax.reload();
+                lgTable.ajax.reload();
                 showFeedback('Layer group saved successfully.');
             })
             .catch(function(err) {
@@ -406,7 +406,7 @@
                 return r.json();
             })
             .then(function() {
-                table.ajax.reload();
+                lgTable.ajax.reload();
                 showFeedback('Layer group published successfully.');
             })
             .catch(function(err) {
@@ -423,7 +423,7 @@
             })
             .then(function(r) {
                 if (!r.ok && r.status !== 204) return r.json().then(function(e) { throw e; });
-                table.ajax.reload();
+                lgTable.ajax.reload();
                 showFeedback('Layer group deleted.');
             })
             .catch(function(err) {
