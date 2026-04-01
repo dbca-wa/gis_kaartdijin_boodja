@@ -137,6 +137,7 @@ var kblayersubmission = {
                             html += "<td>LM" + layer_submission.id + "</td>";
                             html += "<td><a href='/catalogue/entries/" + layer_submission.catalogue_entry + "/details/' style='text-decoration: none;'>CE" + layer_submission.catalogue_entry + ": " + layer_submission.name + "</a></td>";
                             html += "<td>" + (layer_submission.permission_type == 1 ? utils.public_icon() + layer_submission.permission_type_str : utils.restricted_icon() + layer_submission.permission_type_str) + "</td>"
+                            html += "<td>" + (layer_submission.file_size != null ? utils.format_file_size(layer_submission.file_size) : '---') + "</td>";
                             html += "<td>" + formattedDate + "</td>";
                             if (layer_submission.status == 1){  // 1: Submitted
                                 html += "<td><span class='badge bg-secondary'>" + layer_submission.status_name + "</span></td>";
