@@ -1323,6 +1323,15 @@ class GeoServerLayerGroupViewSet(
     filter_backends = [rest_filters.SearchFilter]
     search_fields = ["name", "title", "workspace__name", "geoserver_pool__name"]
 
+    def get_renderers(self):
+        # DatatablesRenderer is only needed for the list action (pagination wrapper).
+        # For all other actions (retrieve, create, update, destroy, publish) return
+        # plain JSONRenderer so that the response is a bare object without the
+        # {"data": {...}} wrapper that DatatablesRenderer adds to single objects.
+        if self.action == "list":
+            return [DatatablesRenderer(), JSONRenderer()]
+        return [JSONRenderer()]
+
     def destroy(self, request, *args, **kwargs):
         """Delete layer group from GeoServer before removing from the database."""
         layer_group = self.get_object()
