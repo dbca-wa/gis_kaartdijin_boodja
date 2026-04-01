@@ -170,9 +170,15 @@ class GeoServerManagerQueueViewSet(viewsets.GenericViewSet):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
+        file_size = file_path.stat().st_size
         response = StreamingHttpResponse(
             streaming_content=_stream_file(file_path),
             content_type="application/octet-stream",
         )
         response["Content-Disposition"] = f'attachment; filename="{file_path.name}"'
+        # Set Content-Length so that upstream proxies (nginx / Auth2) do not need to
+        # use chunked transfer encoding.  Without this header the proxy may re-encode
+        # the body as chunked, producing malformed chunk-size lines that urllib3
+        # rejects with InvalidChunkLength.
+        response["Content-Length"] = file_size
         return response
