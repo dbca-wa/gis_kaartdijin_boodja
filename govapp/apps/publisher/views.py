@@ -1379,6 +1379,22 @@ class GeoServerLayerGroupEntryViewSet(
     serializer_class = GeoServerLayerGroupEntrySerializer
     permission_classes = [accounts_permissions.CanAccessOptionMenu]
 
+    def perform_create(self, serializer):
+        """Convert model-level ValidationError to a DRF 400 response.
+
+        GeoServerLayerGroupEntry.save() calls full_clean() which raises
+        django.core.exceptions.ValidationError when the channel's workspace
+        or pool does not match the parent group.  DRF does not catch that
+        exception automatically, causing a 500.  We re-raise it as a DRF
+        ValidationError so the client receives a 400 with the error detail.
+        """
+        from django.core.exceptions import ValidationError as DjangoValidationError
+        from rest_framework.exceptions import ValidationError as DRFValidationError
+        try:
+            serializer.save()
+        except DjangoValidationError as exc:
+            raise DRFValidationError(detail=exc.message_dict if hasattr(exc, 'message_dict') else exc.messages)
+
 
 class GeoServerLayerHealthcheckViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = models.publish_channels.GeoServerLayerHealthcheck.objects.all()

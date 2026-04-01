@@ -23,6 +23,7 @@ class GeoServerLayerGroupEntrySerializer(serializers.ModelSerializer):
         model = GeoServerLayerGroupEntry
         fields = (
             "id",
+            "layer_group",
             "publish_channel",
             "publish_channel_name",
             "order",
