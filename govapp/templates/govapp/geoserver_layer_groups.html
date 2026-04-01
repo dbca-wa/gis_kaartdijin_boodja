@@ -140,10 +140,7 @@
         // ── Helpers ──────────────────────────────────────────────────────────
 
         function showFeedback(msg, isError) {
-            const el = document.getElementById('feedback-modal-text');
-            if (el) el.textContent = msg;
-            const modal = new bootstrap.Modal(document.getElementById('feedbackModal'));
-            modal.show();
+            FeedbackModal.showFeedback(msg, !isError);
         }
 
         // ── DataTable ────────────────────────────────────────────────────────
@@ -441,7 +438,7 @@
                     (data.results || data.data || []).forEach(function(ch) {
                         const opt = document.createElement('option');
                         opt.value = ch.id;
-                        opt.textContent = ch.name || (ch.workspace_name + ':' + ch.layer_name);
+                        opt.textContent = ch.layer_name_with_workspace || ch.workspace_name || ch.id;
                         select.appendChild(opt);
                     });
                 });
