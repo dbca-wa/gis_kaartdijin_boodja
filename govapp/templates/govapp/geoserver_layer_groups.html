@@ -204,9 +204,8 @@
             });
             $('#layerGroupTable').on('click', '.btn-delete', function() {
                 pendingDeleteId = $(this).data('id');
-                document.getElementById('confirmation-modal-text').textContent =
-                    'Are you sure you want to delete this layer group? It will also be removed from GeoServer.';
-                new bootstrap.Modal(document.getElementById('confirmationModal')).show();
+                document.getElementById('item_to_be_deleted').textContent = 'this layer group (it will also be removed from GeoServer)';
+                new bootstrap.Modal(document.getElementById('deleteConfirmationModal')).show();
             });
         }
 
@@ -279,6 +278,9 @@
             editingEntries = [];
             renderMemberList();
             document.getElementById('entryAddRow').classList.add('d-none');
+            // Clear channel dropdown so stale options from a previous modal are not shown.
+            const sel = document.getElementById('entryChannelSelect');
+            while (sel.options.length > 1) { sel.remove(1); }
         }
 
         function openEditModal(id) {
@@ -302,6 +304,7 @@
                         };
                     });
                     renderMemberList();
+                    loadChannels(data.workspace, data.geoserver_pool);
                     new bootstrap.Modal(document.getElementById('layerGroupModal')).show();
                 });
         }
@@ -387,7 +390,14 @@
                         });
                     });
 
-                    return Promise.all([...deletePromises, ...createPromises, ...updatePromises]);
+                    const allPromises = [...deletePromises, ...createPromises, ...updatePromises];
+                    return Promise.all(allPromises.map(function(p) {
+                        return p.then(function(r) {
+                            if (!r.ok && r.status !== 204) {
+                                return r.json().then(function(e) { throw new Error(JSON.stringify(e)); });
+                            }
+                        });
+                    }));
                 });
         }
 
@@ -430,17 +440,26 @@
 
         // ── Publish channel dropdown ──────────────────────────────────────────
 
-        function loadChannels() {
-            fetch(CHANNELS_API + '?page_size=1000')
+        function loadChannels(workspaceId, poolId) {
+            const select = document.getElementById('entryChannelSelect');
+            // Clear immediately and disable while loading to prevent stale options being selected.
+            while (select.options.length > 1) { select.remove(1); }
+            select.disabled = true;
+            let url = CHANNELS_API + '?limit=1000';
+            if (workspaceId) url += '&workspace=' + workspaceId;
+            if (poolId) url += '&geoserver_pool=' + poolId;
+            fetch(url)
                 .then(function(r) { return r.json(); })
                 .then(function(data) {
-                    const select = document.getElementById('entryChannelSelect');
                     (data.results || data.data || []).forEach(function(ch) {
                         const opt = document.createElement('option');
                         opt.value = ch.id;
                         opt.textContent = ch.layer_name_with_workspace || ch.workspace_name || ch.id;
                         select.appendChild(opt);
                     });
+                })
+                .finally(function() {
+                    select.disabled = false;
                 });
         }
 
@@ -448,12 +467,34 @@
 
         document.addEventListener('DOMContentLoaded', function() {
             buildTable();
-            loadChannels();
 
             document.getElementById('btnCreateLayerGroup').addEventListener('click', function() {
                 resetModal();
+                // Channels will be loaded once a workspace is selected.
                 new bootstrap.Modal(document.getElementById('layerGroupModal')).show();
             });
+
+            // Reload channel list whenever workspace OR pool changes.
+            // Existing member entries are also cleared because they belong to
+            // the previous workspace/pool and would fail server-side validation.
+            function reloadChannelsFromForm() {
+                const workspaceId = document.getElementById('modalWorkspace').value || null;
+                const poolId = document.getElementById('modalPool').value || null;
+                const select = document.getElementById('entryChannelSelect');
+
+                // Clear member entries — they are no longer valid for the new workspace/pool.
+                editingEntries = [];
+                renderMemberList();
+
+                if (!workspaceId || !poolId) {
+                    // One field is not yet selected — clear the dropdown.
+                    while (select.options.length > 1) { select.remove(1); }
+                    return;
+                }
+                loadChannels(workspaceId, poolId);
+            }
+            document.getElementById('modalWorkspace').addEventListener('change', reloadChannelsFromForm);
+            document.getElementById('modalPool').addEventListener('change', reloadChannelsFromForm);
 
             document.getElementById('btnSaveLayerGroup').addEventListener('click', saveLayerGroup);
 
@@ -486,12 +527,12 @@
             });
 
             // Confirmation modal confirm button
-            document.getElementById('confirm-modal-confirm-btn') && document.getElementById('confirm-modal-confirm-btn').addEventListener('click', function() {
+            document.getElementById('confirmDeleteBtn').addEventListener('click', function() {
                 if (pendingDeleteId) {
                     deleteGroup(pendingDeleteId);
                     pendingDeleteId = null;
                 }
-                bootstrap.Modal.getInstance(document.getElementById('confirmationModal')).hide();
+                bootstrap.Modal.getInstance(document.getElementById('deleteConfirmationModal')).hide();
             });
         });
     </script>
