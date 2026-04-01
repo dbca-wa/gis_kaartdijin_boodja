@@ -391,6 +391,47 @@ class EmailNotificationAdmin(reversion.admin.VersionAdmin):
 #     raw_id_fields = ('user',)
 
 
+class GeoServerLayerGroupEntryInline(admin.TabularInline):
+    """Inline admin for GeoServerLayerGroupEntry within GeoServerLayerGroup."""
+    model = models.geoserver_layer_groups.GeoServerLayerGroupEntry
+    fields = ('publish_channel', 'order')
+    extra = 0
+    ordering = ('order',)
+
+
+class GeoServerLayerGroupAdmin(reversion.admin.VersionAdmin):
+    """Custom Django Admin for GeoServer Layer Groups."""
+    search_fields = ('id', 'name', 'title', 'published_name')
+    list_display = ('id', 'name', 'workspace', 'geoserver_pool', 'published_name', 'active', 'updated_at')
+    list_filter = ('workspace', 'geoserver_pool', 'active')
+    list_display_links = ('id', 'name')
+    ordering = ('-id',)
+    inlines = [GeoServerLayerGroupEntryInline]
+    actions = ['publish_to_geoserver']
+
+    def publish_to_geoserver(self, request, queryset):
+        from govapp.apps.publisher import geoserver_layergroup_publisher
+        success_count = 0
+        failure_count = 0
+        for layer_group in queryset:
+            ok, exc = geoserver_layergroup_publisher.publish(layer_group)
+            if ok:
+                success_count += 1
+            else:
+                failure_count += 1
+                self.message_user(
+                    request,
+                    f"Failed to publish '{layer_group}': {exc}",
+                    level='error',
+                )
+        if success_count:
+            self.message_user(
+                request,
+                f"Successfully published {success_count} layer group(s) to GeoServer.",
+            )
+    publish_to_geoserver.short_description = "Publish selected layer groups to GeoServer"
+
+
 admin.site.register(models.publish_channels.FTPServer, reversion.admin.VersionAdmin)
 admin.site.register(models.publish_channels.FTPPublishChannel, FTPPublishChannelAdmin)
 admin.site.register(models.publish_channels.CDDPPublishChannel, CDDPPublishChannelAdmin)
@@ -403,3 +444,4 @@ admin.site.register(models.geoserver_queues.GeoServerQueue, GeoServerQueueAdmin)
 admin.site.register(models.geoserver_roles_groups.GeoServerRole, GeoServerRoleAdmin)
 admin.site.register(models.geoserver_roles_groups.GeoServerGroup, GeoServerGroupAdmin)
 admin.site.register(models.publish_channels.GeoServerLayerHealthcheck, GeoServerHealthCheckAdmin)
+admin.site.register(models.geoserver_layer_groups.GeoServerLayerGroup, GeoServerLayerGroupAdmin)
