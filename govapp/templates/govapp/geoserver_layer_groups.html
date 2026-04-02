@@ -28,6 +28,7 @@
                             <th>Workspace</th>
                             <th>GeoServer Pool</th>
                             <th>Status</th>
+                            <th>Created</th>
                             <th>Updated</th>
                             <th>Actions</th>
                         </tr>
@@ -173,6 +174,7 @@
                             return '<span class="badge bg-success">Published</span>';
                         }
                     },
+                    { data: 'created_at' },
                     { data: 'updated_at' },
                     {
                         data: null,
