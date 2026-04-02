@@ -554,17 +554,19 @@ class GeoServer:
             resp_store = session.post(
                 url=datastores_url,
                 json=store_payload,
-                timeout=60.0,
+                timeout=(15, 60.0),
             )
             log.info(f"Datastore response: '{resp_store.status_code}: {resp_store.text}'")
             resp_store.raise_for_status()
 
             # Step 2: create the featuretype (layer) from the store.
+            # GeoServer reads the GeoPackage file during this step, which can be slow
+            # for large files — allow up to 50 minutes for the read.
             log.info(f"Creating featuretype (layer) via catalog API: {featuretype_url}")
             resp_ft = session.post(
                 url=featuretype_url,
                 json=featuretype_payload,
-                timeout=60.0,
+                timeout=(15, 3000.0),
             )
             log.info(f"Featuretype response: '{resp_ft.status_code}: {resp_ft.text}'")
             resp_ft.raise_for_status()
@@ -686,17 +688,19 @@ class GeoServer:
             resp_store = session.post(
                 url=stores_url,
                 json=store_payload,
-                timeout=60.0,
+                timeout=(15, 60.0),
             )
             log.info(f"Coverage store response: '{resp_store.status_code}: {resp_store.text}'")
             resp_store.raise_for_status()
 
             # Step 2: create the coverage (layer) from the store.
+            # GeoServer reads the GeoTIFF file during this step, which can be slow
+            # for large files — allow up to 50 minutes for the read.
             log.info(f"Creating coverage (layer) via catalog API: {coverage_url}")
             resp_coverage = session.post(
                 url=coverage_url,
                 json=coverage_payload,
-                timeout=60.0,
+                timeout=(15, 3000.0),
             )
             log.info(f"Coverage response: '{resp_coverage.status_code}: {resp_coverage.text}'")
             resp_coverage.raise_for_status()
