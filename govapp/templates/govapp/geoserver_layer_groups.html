@@ -52,10 +52,12 @@
                         <div class="col-6">
                             <label class="form-label">Name <span class="text-danger">*</span></label>
                             <input type="text" class="form-control" id="modalName">
+                            <div class="form-text">Technical identifier used in WMS/WFS requests (e.g. <code>LAYERS=workspace:name</code>). Cannot be changed after publishing without breaking existing clients.</div>
                         </div>
                         <div class="col-6">
                             <label class="form-label">Title</label>
                             <input type="text" class="form-control" id="modalTitle">
+                            <div class="form-text">Human-readable label shown in WMS Capabilities and GIS clients (e.g. QGIS, ArcGIS). Safe to change at any time.</div>
                         </div>
                     </div>
                     <div class="row mb-3">
