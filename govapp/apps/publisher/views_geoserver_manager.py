@@ -59,7 +59,7 @@ class SSOMiddlewareAuthentication(BaseAuthentication):
             return (user, None)
         return None
 
-_CHUNK_SIZE = 8 * 1024  # 8 KB
+_CHUNK_SIZE = 1024 * 1024  # 1 MB
 
 # Valid preceding statuses for each transition allowed by kb_geoserver_manager
 _VALID_PREDECESSORS = {
