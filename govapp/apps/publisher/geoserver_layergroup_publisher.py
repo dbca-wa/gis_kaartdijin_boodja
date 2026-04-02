@@ -109,9 +109,11 @@ def publish(layer_group: GeoServerLayerGroup) -> tuple[bool, Exception | None]:
                 abstract=layer_group.abstract,
             )
 
-        # Record the name under which the group is now published.
+        # Record the name under which the group is now published and clear the
+        # republish flag since the group is now in sync with GeoServer.
         GeoServerLayerGroup.objects.filter(pk=layer_group.pk).update(
-            published_name=current_name
+            published_name=current_name,
+            needs_republish=False,
         )
         log.info(f"Layer group '{layer_group}' published successfully.")
 

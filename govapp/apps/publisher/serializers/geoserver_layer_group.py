@@ -51,12 +51,13 @@ class GeoServerLayerGroupSerializer(serializers.ModelSerializer):
             "geoserver_pool",
             "geoserver_pool_name",
             "published_name",
+            "needs_republish",
             "active",
             "entries",
             "created_at",
             "updated_at",
         )
-        read_only_fields = ("published_name",)
+        read_only_fields = ("published_name", "needs_republish")
 
     def get_created_at(self, obj):
         if obj.created_at:

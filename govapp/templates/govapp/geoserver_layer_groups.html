@@ -27,7 +27,7 @@
                             <th>Title</th>
                             <th>Workspace</th>
                             <th>GeoServer Pool</th>
-                            <th>Published Name</th>
+                            <th>Status</th>
                             <th>Active</th>
                             <th>Updated</th>
                             <th>Actions</th>
@@ -169,10 +169,14 @@
                     { data: 'geoserver_pool_name' },
                     {
                         data: 'published_name',
-                        render: function(data) {
-                            return data
-                                ? '<span class="badge bg-success">' + data + '</span>'
-                                : '<span class="badge bg-secondary">Not published</span>';
+                        render: function(data, type, row) {
+                            if (!data) {
+                                return '<span class="badge bg-secondary">Not published</span>';
+                            }
+                            if (data !== row.name || row.needs_republish) {
+                                return '<span class="badge bg-warning text-dark">Republish required</span>';
+                            }
+                            return '<span class="badge bg-success">Published</span>';
                         }
                     },
                     {

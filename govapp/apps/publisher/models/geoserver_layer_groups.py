@@ -66,6 +66,13 @@ class GeoServerLayerGroup(mixins.RevisionedMixin):
             "and the new name is created."
         ),
     )
+    needs_republish = models.BooleanField(
+        default=False,
+        help_text=(
+            "Set to True automatically when member layers are added or removed "
+            "after the last publish. Cleared on successful publish."
+        ),
+    )
     active = models.BooleanField(
         default=True,
         help_text="Inactive groups are ignored by publish operations.",
@@ -145,6 +152,23 @@ class GeoServerLayerGroupEntry(mixins.RevisionedMixin):
         """Run full_clean before saving to enforce workspace/pool constraints."""
         self.full_clean()
         super().save(*args, **kwargs)
+        # Mark the parent group as needing a republish whenever a member is
+        # added or updated, but only if the group has already been published.
+        if self.layer_group.published_name:
+            GeoServerLayerGroup.objects.filter(pk=self.layer_group_id).update(
+                needs_republish=True
+            )
+
+    def delete(self, *args, **kwargs):
+        """Mark parent group as needing republish when a member is removed."""
+        layer_group_id = self.layer_group_id
+        published_name = self.layer_group.published_name
+        result = super().delete(*args, **kwargs)
+        if published_name:
+            GeoServerLayerGroup.objects.filter(pk=layer_group_id).update(
+                needs_republish=True
+            )
+        return result
 
     def __str__(self) -> str:
         return f"{self.layer_group} — {self.publish_channel} (order={self.order})"
