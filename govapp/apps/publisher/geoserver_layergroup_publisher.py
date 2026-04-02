@@ -67,6 +67,27 @@ def publish(layer_group: GeoServerLayerGroup) -> tuple[bool, Exception | None]:
             )
             return True, None
 
+        # Verify that every member layer is already published to GeoServer.
+        # GeoServer silently discards unknown layers and then rejects the group
+        # with "Layer group must not be empty", so we catch this here first.
+        missing = []
+        for ln in layer_names:
+            try:
+                details = gs.get_layer_details(ln)
+                if details is None:
+                    missing.append(ln)
+            except Exception:
+                # Any error (including 404) means the layer is not available.
+                missing.append(ln)
+        if missing:
+            msg = (
+                f"The following member layers are not yet published to GeoServer "
+                f"and must be published individually before the layer group can be "
+                f"created: {', '.join(missing)}"
+            )
+            log.error(f"Cannot publish layer group '{layer_group}': {msg}")
+            return False, ValueError(msg)
+
         # Determine whether to POST (create) or PUT (update).
         existing = gs.get_layer_group(workspace, current_name)
         if existing is None:

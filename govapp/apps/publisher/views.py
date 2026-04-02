@@ -1350,9 +1350,17 @@ class GeoServerLayerGroupViewSet(
         layer_group = self.get_object()
         success, exc = geoserver_layergroup_publisher.publish(layer_group)
         if not success:
+            # ValueError indicates a validation problem (e.g. missing layers in
+            # GeoServer); return 400 so the UI can display a meaningful message.
+            # Other exceptions indicate a GeoServer communication error (502).
+            status_code = (
+                status.HTTP_400_BAD_REQUEST
+                if isinstance(exc, ValueError)
+                else status.HTTP_502_BAD_GATEWAY
+            )
             return Response(
-                {"error": f"Failed to publish layer group: {exc}"},
-                status=status.HTTP_502_BAD_GATEWAY,
+                {"error": str(exc)},
+                status=status_code,
             )
         # Refresh from DB so published_name is current in the response.
         layer_group.refresh_from_db()

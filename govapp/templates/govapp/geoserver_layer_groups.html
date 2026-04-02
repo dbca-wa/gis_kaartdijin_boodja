@@ -419,7 +419,8 @@
                 showFeedback('Layer group published successfully.');
             })
             .catch(function(err) {
-                showFeedback('Publish failed: ' + JSON.stringify(err), true);
+                var msg = (err && err.error) ? err.error : JSON.stringify(err);
+                showFeedback('Publish failed: ' + msg, true);
             });
         }
 
