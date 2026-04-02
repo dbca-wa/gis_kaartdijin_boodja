@@ -507,6 +507,9 @@
 
             document.getElementById('btnAddEntry').addEventListener('click', function() {
                 document.getElementById('entryAddRow').classList.remove('d-none');
+                // Reload channels each time the row is shown in case workspace/pool
+                // changed or the list was cleared by a previous Cancel.
+                reloadChannelsFromForm();
             });
 
             document.getElementById('btnCancelAddEntry').addEventListener('click', function() {
