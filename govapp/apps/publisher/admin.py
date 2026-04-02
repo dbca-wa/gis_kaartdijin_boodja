@@ -402,8 +402,8 @@ class GeoServerLayerGroupEntryInline(admin.TabularInline):
 class GeoServerLayerGroupAdmin(reversion.admin.VersionAdmin):
     """Custom Django Admin for GeoServer Layer Groups."""
     search_fields = ('id', 'name', 'title', 'published_name')
-    list_display = ('id', 'name', 'workspace', 'geoserver_pool', 'published_name', 'active', 'updated_at')
-    list_filter = ('workspace', 'geoserver_pool', 'active')
+    list_display = ('id', 'name', 'workspace', 'geoserver_pool', 'published_name', 'updated_at')
+    list_filter = ('workspace', 'geoserver_pool')
     list_display_links = ('id', 'name')
     ordering = ('-id',)
     inlines = [GeoServerLayerGroupEntryInline]

@@ -73,10 +73,6 @@ class GeoServerLayerGroup(mixins.RevisionedMixin):
             "after the last publish. Cleared on successful publish."
         ),
     )
-    active = models.BooleanField(
-        default=True,
-        help_text="Inactive groups are ignored by publish operations.",
-    )
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

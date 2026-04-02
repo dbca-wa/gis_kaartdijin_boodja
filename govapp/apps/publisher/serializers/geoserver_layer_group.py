@@ -52,7 +52,6 @@ class GeoServerLayerGroupSerializer(serializers.ModelSerializer):
             "geoserver_pool_name",
             "published_name",
             "needs_republish",
-            "active",
             "entries",
             "created_at",
             "updated_at",

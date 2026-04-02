@@ -28,7 +28,6 @@
                             <th>Workspace</th>
                             <th>GeoServer Pool</th>
                             <th>Status</th>
-                            <th>Active</th>
                             <th>Updated</th>
                             <th>Actions</th>
                         </tr>
@@ -86,29 +85,24 @@
                             </select>
                         </div>
                     </div>
-                    <div class="row mb-3">
-                        <div class="col-6">
-                            <label class="form-label">Active</label>
-                            <div class="form-check form-switch mt-1">
-                                <input class="form-check-input" type="checkbox" id="modalActive" checked>
-                            </div>
-                        </div>
-                    </div>
                     <hr>
                     <h6>Member Layers</h6>
                     <p class="text-muted small">Add GeoServer Publish Channels as member layers. Use the arrows to adjust rendering order.</p>
                     <div id="memberList" class="mb-3"></div>
                     <button type="button" class="btn btn-outline-secondary btn-sm" id="btnAddEntry">+ Add Layer</button>
                     <!-- Entry add row (hidden) -->
-                    <div id="entryAddRow" class="row mt-2 d-none">
-                        <div class="col-8">
-                            <select class="form-select form-select-sm" id="entryChannelSelect">
-                                <option value="">-- Select Publish Channel --</option>
-                            </select>
-                        </div>
-                        <div class="col-4">
-                            <button type="button" class="btn btn-primary btn-sm" id="btnConfirmAddEntry">Add</button>
-                            <button type="button" class="btn btn-secondary btn-sm" id="btnCancelAddEntry">Cancel</button>
+                    <div id="entryAddRow" class="mt-2 d-none">
+                        <p id="entryChannelHint" class="text-muted small d-none">Please select a Workspace and GeoServer Pool first.</p>
+                        <div id="entryChannelRow" class="row d-none">
+                            <div class="col-8">
+                                <select class="form-select form-select-sm" id="entryChannelSelect">
+                                    <option value="">-- Select Publish Channel --</option>
+                                </select>
+                            </div>
+                            <div class="col-4">
+                                <button type="button" class="btn btn-primary btn-sm" id="btnConfirmAddEntry">Add</button>
+                                <button type="button" class="btn btn-secondary btn-sm" id="btnCancelAddEntry">Cancel</button>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -177,15 +171,6 @@
                                 return '<span class="badge bg-warning text-dark">Republish required</span>';
                             }
                             return '<span class="badge bg-success">Published</span>';
-                        }
-                    },
-                    {
-                        data: 'active',
-                        className: 'text-center',
-                        render: function(data) {
-                            return data
-                                ? '<span class="badge bg-success">Active</span>'
-                                : '<span class="badge bg-secondary">Inactive</span>';
                         }
                     },
                     { data: 'updated_at' },
@@ -280,7 +265,6 @@
             document.getElementById('modalAbstract').value = '';
             document.getElementById('modalWorkspace').value = '';
             document.getElementById('modalPool').value = '';
-            document.getElementById('modalActive').checked = true;
             editingEntries = [];
             renderMemberList();
             document.getElementById('entryAddRow').classList.add('d-none');
@@ -300,7 +284,6 @@
                     document.getElementById('modalAbstract').value = data.abstract || '';
                     document.getElementById('modalWorkspace').value = data.workspace;
                     document.getElementById('modalPool').value = data.geoserver_pool;
-                    document.getElementById('modalActive').checked = data.active;
                     editingEntries = (data.entries || []).map(function(e) {
                         return {
                             id: e.id,
@@ -325,7 +308,6 @@
                 abstract: document.getElementById('modalAbstract').value.trim() || null,
                 workspace: parseInt(document.getElementById('modalWorkspace').value) || null,
                 geoserver_pool: parseInt(document.getElementById('modalPool').value) || null,
-                active: document.getElementById('modalActive').checked,
             };
 
             const url = id ? API_BASE + id + '/' : API_BASE;
@@ -487,6 +469,8 @@
             function reloadChannelsFromForm() {
                 const workspaceId = document.getElementById('modalWorkspace').value || null;
                 const poolId = document.getElementById('modalPool').value || null;
+                const hint = document.getElementById('entryChannelHint');
+                const row = document.getElementById('entryChannelRow');
                 const select = document.getElementById('entryChannelSelect');
 
                 // Clear member entries — they are no longer valid for the new workspace/pool.
@@ -494,26 +478,73 @@
                 renderMemberList();
 
                 if (!workspaceId || !poolId) {
-                    // One field is not yet selected — clear the dropdown.
+                    // Show hint message and hide the dropdown until both fields are selected.
                     while (select.options.length > 1) { select.remove(1); }
+                    hint.classList.remove('d-none');
+                    row.classList.add('d-none');
                     return;
                 }
+                // Both workspace and pool are selected — show dropdown and load channels.
+                hint.classList.add('d-none');
+                row.classList.remove('d-none');
                 loadChannels(workspaceId, poolId);
             }
-            document.getElementById('modalWorkspace').addEventListener('change', reloadChannelsFromForm);
-            document.getElementById('modalPool').addEventListener('change', reloadChannelsFromForm);
+            // Track previous values so we can restore them if user cancels the confirmation.
+            let prevWorkspaceValue = '';
+            let prevPoolValue = '';
+
+            document.getElementById('modalWorkspace').addEventListener('focus', function() {
+                prevWorkspaceValue = this.value;
+            });
+            document.getElementById('modalPool').addEventListener('focus', function() {
+                prevPoolValue = this.value;
+            });
+
+            function handleWorkspacePoolChange(selectEl, prevValue) {
+                if (editingEntries.length > 0) {
+                    const confirmed = window.confirm(
+                        'Changing the Workspace or GeoServer Pool will clear the member layer ' +
+                        'list below. Your data in GeoServer will not be affected until you click Publish.\n\n' +
+                        'Do you want to continue?'
+                    );
+                    if (!confirmed) {
+                        selectEl.value = prevValue;
+                        return;
+                    }
+                }
+                reloadChannelsFromForm();
+            }
+
+            document.getElementById('modalWorkspace').addEventListener('change', function() {
+                handleWorkspacePoolChange(this, prevWorkspaceValue);
+            });
+            document.getElementById('modalPool').addEventListener('change', function() {
+                handleWorkspacePoolChange(this, prevPoolValue);
+            });
 
             document.getElementById('btnSaveLayerGroup').addEventListener('click', saveLayerGroup);
 
             document.getElementById('btnAddEntry').addEventListener('click', function() {
                 document.getElementById('entryAddRow').classList.remove('d-none');
-                // Reload channels each time the row is shown in case workspace/pool
-                // changed or the list was cleared by a previous Cancel.
-                reloadChannelsFromForm();
+                // Show the channel dropdown (or hint) without touching editingEntries.
+                const workspaceId = document.getElementById('modalWorkspace').value || null;
+                const poolId = document.getElementById('modalPool').value || null;
+                const hint = document.getElementById('entryChannelHint');
+                const row = document.getElementById('entryChannelRow');
+                if (!workspaceId || !poolId) {
+                    hint.classList.remove('d-none');
+                    row.classList.add('d-none');
+                } else {
+                    hint.classList.add('d-none');
+                    row.classList.remove('d-none');
+                    loadChannels(workspaceId, poolId);
+                }
             });
 
             document.getElementById('btnCancelAddEntry').addEventListener('click', function() {
                 document.getElementById('entryAddRow').classList.add('d-none');
+                document.getElementById('entryChannelRow').classList.add('d-none');
+                document.getElementById('entryChannelHint').classList.add('d-none');
                 document.getElementById('entryChannelSelect').value = '';
             });
 

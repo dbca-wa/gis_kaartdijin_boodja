@@ -28,12 +28,6 @@ def publish(layer_group: GeoServerLayerGroup) -> tuple[bool, Exception | None]:
             (False, exc) on failure.
     """
     try:
-        if not layer_group.active:
-            log.info(
-                f"Layer group '{layer_group}' is inactive — skipping publish."
-            )
-            return True, None
-
         gs = geoserver_utils.geoserverWithCustomCreds(
             layer_group.geoserver_pool.url,
             layer_group.geoserver_pool.username,
