@@ -1,6 +1,38 @@
 """Management command to export a CSV report of GeoServer channels where
 tile cache is enabled (create_cached_layer=True) and server cache is 0
 (expire_server_cache_after_n_seconds=0).
+
+Usage:
+    python manage.py export_tilecache_report [--output FILE] [--group GROUP]
+
+Arguments:
+    --output FILE   Write the CSV report to FILE. If omitted, CSV is printed to stdout.
+    --group GROUP   Send the CSV report by email to all active users in GROUP.
+                    Defaults to the TILECACHE_REPORT_GROUP environment variable,
+                    which itself defaults to 'Tile Cache Report'.
+                    Pass an empty string (--group "") to suppress email sending.
+
+Examples:
+    # Print CSV to stdout and email to the default group ('Tile Cache Report')
+    python manage.py export_tilecache_report
+
+    # Save CSV to a file and email to the default group
+    python manage.py export_tilecache_report --output /tmp/report.csv
+
+    # Print CSV to stdout only (no email)
+    python manage.py export_tilecache_report --group ""
+
+    # Save CSV to a file only (no email)
+    python manage.py export_tilecache_report --output /tmp/report.csv --group ""
+
+    # Print CSV to stdout and email to a specific group
+    python manage.py export_tilecache_report --group "GIS Admins"
+
+Environment variables:
+    TILECACHE_REPORT_GROUP  Override the default email recipient group name.
+                            Default: 'Tile Cache Report'
+    EMAIL_DELIVERY          Must be set to 'on' for emails to actually be sent.
+                            Default: 'off'
 """
 
 import csv
