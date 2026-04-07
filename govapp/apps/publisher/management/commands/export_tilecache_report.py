@@ -82,6 +82,8 @@ class Command(base.BaseCommand):
         ).order_by("id")
 
         fieldnames = [
+            "catalogue_id",
+            "publish_id",
             "channel_id",
             "layer_name",
             "workspace",
@@ -100,6 +102,8 @@ class Command(base.BaseCommand):
         count = 0
         for ch in channels.iterator():
             writer.writerow({
+                "catalogue_id": ch.publish_entry.catalogue_entry_id,
+                "publish_id": ch.publish_entry_id,
                 "channel_id": ch.id,
                 "layer_name": ch.name,
                 "workspace": str(ch.workspace),
