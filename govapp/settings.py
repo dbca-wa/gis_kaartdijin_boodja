@@ -306,6 +306,7 @@ GROUP_ADMINISTRATORS = 'Administrators'
 GROUP_CATALOGUE_EDITORS = 'Catalogue Editors'
 GROUP_CATALOGUE_ADMIN = 'Catalogue Admin'
 GROUP_API_USER = 'API User'
+GROUP_TILECACHE_REPORT = 'Tile Cache Report'
 CUSTOM_GROUPS = [
     # Groups in this list are created automatically if not exist.
     # This is not the geoserver usergroup
@@ -313,6 +314,7 @@ CUSTOM_GROUPS = [
     GROUP_CATALOGUE_EDITORS,
     GROUP_CATALOGUE_ADMIN,
     GROUP_API_USER,
+    GROUP_TILECACHE_REPORT,
 ]
 GEOSERVER_GROUP_DBCA_USERS = 'DBCA_Users'
 CUSTOM_GEOSERVER_GROUPS = [
