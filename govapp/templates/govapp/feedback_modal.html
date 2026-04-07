@@ -19,6 +19,7 @@
     let FeedbackModal = {
         showFeedback: function(message, isSuccess) {
             const modalBody = document.getElementById('feedbackModalBody');
+            modalBody.style.whiteSpace = 'pre-wrap';
             modalBody.textContent = message;
             modalBody.className = isSuccess ? 'alert alert-primary' : 'alert alert-danger';
             

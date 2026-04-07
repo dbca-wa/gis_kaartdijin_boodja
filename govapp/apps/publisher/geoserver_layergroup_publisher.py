@@ -74,10 +74,11 @@ def publish(layer_group: GeoServerLayerGroup) -> tuple[bool, Exception | None]:
                 # Any error (including 404) means the layer is not available.
                 missing.append(ln)
         if missing:
+            layer_list = "".join(f"\n• {ln}" for ln in missing)
             msg = (
                 f"The following member layers are not yet published to GeoServer "
                 f"and must be published individually before the layer group can be "
-                f"created: {', '.join(missing)}"
+                f"created:{layer_list}"
             )
             log.error(f"Cannot publish layer group '{layer_group}': {msg}")
             return False, ValueError(msg)
