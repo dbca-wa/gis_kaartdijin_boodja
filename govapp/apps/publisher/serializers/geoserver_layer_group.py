@@ -15,7 +15,7 @@ class GeoServerLayerGroupEntrySerializer(serializers.ModelSerializer):
     """Serializer for a single layer group member entry."""
 
     publish_channel_name = serializers.CharField(
-        source="publish_channel.name",
+        source="publish_channel.layer_name_with_workspace",
         read_only=True,
     )
 
