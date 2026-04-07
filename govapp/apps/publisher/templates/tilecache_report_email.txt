@@ -1,0 +1,10 @@
+{% extends 'base_email.txt' %}
+
+{% block greetings %}{% endblock %}
+
+{% block content %}
+Please find attached the tile cache report for GeoServer publish channels
+where tile cache is enabled and expire_server_cache_after_n_seconds is 0.
+
+Total: {{ count }} record(s).
+{% endblock %}

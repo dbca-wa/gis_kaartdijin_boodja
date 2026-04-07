@@ -24,3 +24,10 @@ class PublishEntryPublishFailEmail(emails.TemplateEmailBase):
     subject = "[KB] Kaartdijin Boodja Publish Entry failed to publish"
     html_template = "publish_entry_publish_fail_email.html"
     txt_template = "publish_entry_publish_fail_email.txt"
+
+
+class TileCacheReportEmail(emails.TemplateEmailBase):
+    """Tile Cache Report Email Abstraction."""
+    subject = "[KB] Tile Cache Report"
+    html_template = "tilecache_report_email.html"
+    txt_template = "tilecache_report_email.txt"

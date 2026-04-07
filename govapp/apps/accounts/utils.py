@@ -383,6 +383,9 @@ def get_file_list(config_path):
     file_list = []
     datetime_format = '%d-%m-%Y %H:%M:%S'
     num_of_files = 0
+    # Normalise config_path: remove trailing slash so the prefix-stripping
+    # logic below always works regardless of how the setting is configured.
+    config_path = config_path.rstrip('/')
         # Recursively collect all files
     for dirpath, _, filenames in os.walk(config_path):
         num_of_files += len(filenames)
