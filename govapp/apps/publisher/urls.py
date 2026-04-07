@@ -22,6 +22,8 @@ router.register("geoserverweb", views.GeoServerQueueViewSet)
 router.register("cddp-contents", views.CDDPContentsViewSet, basename='cddp-contents')
 router.register("geoservergroup", views.GeoServerGroupViewSet)
 router.register("geoserver_layer_healthcheck", views.GeoServerLayerHealthcheckViewSet, basename='geoserver-layer-healthcheck')
+router.register("channels/geoserver-layer-groups", views.GeoServerLayerGroupViewSet, basename='geoserver-layer-groups')
+router.register("channels/geoserver-layer-group-entries", views.GeoServerLayerGroupEntryViewSet, basename='geoserver-layer-group-entries')
 
 # The re_path patterns below make trailing slashes optional for the cddp-contents actions.
 # This is a defensive measure: callers that construct URLs with os.path.join() or strip trailing

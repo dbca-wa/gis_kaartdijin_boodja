@@ -34,7 +34,7 @@ class GeoServerPublishChannelFilter(filters.FilterSet):
     class Meta:
         """GeoServer Publish Channel Filter Metadata."""
         model = models.publish_channels.GeoServerPublishChannel
-        fields = {"id": ["in"]}
+        fields = {"id": ["in"], "workspace": ["exact"], "geoserver_pool": ["exact"]}
 
 
 class PublishEntryFilter(filters.FilterSet):

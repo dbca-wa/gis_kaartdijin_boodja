@@ -59,9 +59,11 @@ class GeoServerPublishChannelSerializer(serializers.ModelSerializer):
     """GeoServer Publish Channel Model Serializer."""
     workspace_name = serializers.ReadOnlyField(source='workspace.name')
     geoserver_pool_name = serializers.ReadOnlyField(source='geoserver_pool.name')
+    layer_name_with_workspace = serializers.ReadOnlyField()
     geoserver_pool_url_ui = serializers.SerializerMethodField()
     store_type_name = serializers.ReadOnlyField(source='get_store_type_display')
     published_at = serializers.SerializerMethodField()
+    layer_groups = serializers.SerializerMethodField()
     
     class Meta:
         """GeoServer Publish Channel Model Serializer Metadata."""
@@ -106,7 +108,15 @@ class GeoServerPublishChannelSerializer(serializers.ModelSerializer):
             else:
                 return f'{obj.geoserver_pool.url}'
         return ''
-        
+
+    def get_layer_groups(self, obj):
+        """Return list of layer groups this channel belongs to."""
+        return list(
+            obj.layer_group_entries
+            .select_related('layer_group')
+            .values('layer_group__id', 'layer_group__name')
+        )
+
     def validate(self, data):
         _validate_bbox(data)
         return data

@@ -82,6 +82,9 @@ urlpatterns = [
     # CDDPQueue
     urls.path("cddp-queue/", views.CDDPQueueView.as_view()),
 
+    # GeoServer Layer Groups
+    urls.path("geoserver-layer-groups/", views.GeoServerLayerGroupsView.as_view()),
+
     # Usergroups
     urls.path("geoserver-groups/", views.GeoServerGroupsView.as_view()),
     urls.re_path("geoserver-group/(?P<pk>\d+)/", views.GeoServerGroupView.as_view()),
