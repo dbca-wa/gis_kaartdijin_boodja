@@ -21,6 +21,7 @@ from govapp.apps.publisher import geoserver_publisher
 from govapp.apps.publisher.models.geoserver_roles_groups import GeoServerGroup, GeoServerRole
 from govapp.apps.publisher.models.publish_channels import GeoServerPublishChannel
 from govapp.apps.publisher.models.workspaces import Workspace
+from govapp.apps.catalogue.models.catalogue_entries import CatalogueEntryType
 from govapp.gis import geoserver
 
 # Typing
@@ -115,9 +116,29 @@ class GeoServerQueueExcutor:
                                 geoserver_pool.create_workspace_if_not_exists(workspace.name)
                             self._publish_to_a_geoserver(geoserver_publish_channel)
                     else:
-                        # Phase 1: convert file only; kb_geoserver_manager will transfer it to the shared volume
-                        self.result_status = GeoServerQueueStatus.CONVERTED
-                        self._convert_publish_queue_item(queue_item)
+                        catalogue_entry_type = queue_item.publish_entry.catalogue_entry.type
+                        if catalogue_entry_type in [CatalogueEntryType.SPATIAL_FILE, CatalogueEntryType.SUBSCRIPTION_QUERY]:
+                            # Phase 1: convert file only; kb_geoserver_manager will transfer it to the shared volume
+                            self.result_status = GeoServerQueueStatus.CONVERTED
+                            self._convert_publish_queue_item(queue_item)
+                        else:
+                            # Subscription types (WMS/WFS/PostGIS): no file needed, publish directly to GeoServer
+                            for geoserver_publish_channel in queue_item.publish_entry.geoserver_channels.all():
+                                geoserver_pool = geoserver_publish_channel.geoserver_pool
+                                if not geoserver_pool:
+                                    self.result_status = GeoServerQueueStatus.FAILED
+                                    self.result_success = False
+                                    self._add_publishing_log(f"[{queue_item.publish_entry.name}] Publishing failed. No geoserver_pool configured.")
+                                    continue
+                                if not geoserver_pool.enabled:
+                                    self.result_status = GeoServerQueueStatus.FAILED
+                                    self.result_success = False
+                                    self._add_publishing_log(f"[{queue_item.publish_entry.name} - {geoserver_pool.url}] Publishing failed. Geoserver_pool is not enabled.")
+                                    continue
+                                workspaces_in_kb = Workspace.objects.all()
+                                for workspace in workspaces_in_kb:
+                                    geoserver_pool.create_workspace_if_not_exists(workspace.name)
+                                self._publish_to_a_geoserver(geoserver_publish_channel)
 
                 self._update_result(queue_item=queue_item)
 

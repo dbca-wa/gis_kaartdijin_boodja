@@ -1079,7 +1079,7 @@ var kblayersubscription = {
                     let td_for_buttons = $('<td class="text-end">')
                     if($('#has_edit_access').val() == "True"){
                         let button_edit = $('<button class="btn btn-primary btn-sm mx-1" id="subscription-custom-query-table-tbody-row-' + catalogue_entry.id + '-history">Edit</button>')
-                        let button_delete = $('<button class="btn btn-primary btn-sm" id="subscription-custom-query-table-tbody-row-' + catalogue_entry.id + '-delete">Delete</button>')
+                        let button_delete = $('<button class="btn btn-danger btn-sm" id="subscription-custom-query-table-tbody-row-' + catalogue_entry.id + '-delete">Delete</button>')
                         button_edit.click(()=>kblayersubscription.show_custom_query_modal(catalogue_entry))
                         button_delete.click(()=>kblayersubscription.delete_custom_query(catalogue_entry))
                         td_for_buttons.append(button_edit)
@@ -1163,7 +1163,7 @@ var kblayersubscription = {
                             return '<div class="btn-group">' +
                                    '<button class="btn btn-primary btn-sm mx-1 btn-edit" ' +
                                    'data-entry-id="' + row.id + '">Edit</button>' +
-                                   '<button class="btn btn-primary btn-sm btn-delete" ' +
+                                   '<button class="btn btn-danger btn-sm btn-delete" ' +
                                    'data-entry-id="' + row.id + '">Delete</button>' +
                                    '</div>';
                         }

@@ -390,14 +390,14 @@ class CatalogueEntryViewSet(
         # select query using inner join and filter
         start_date = self.get_db_now() - timedelta(days=int(days_ago))
         filtered = models.layer_submissions.LayerSubmission.objects.select_related('catalogue_entry').filter(submitted_at__gte=start_date, is_active=True)
-        selected = filtered.values('catalogue_entry__id', 'catalogue_entry__name', 'catalogue_entry__created_at', 'catalogue_entry__updated_at', 'id')
+        selected = filtered.values('catalogue_entry__id', 'catalogue_entry__name', 'catalogue_entry__created_at', 'catalogue_entry__updated_at', 'id', 'submitted_at')
         
         # build a response data
         response_data = [{
                 'id': entry['catalogue_entry__id'],
                 'name': entry['catalogue_entry__name'],
                 'created_at': entry['catalogue_entry__created_at'],
-                'updated_at': entry['catalogue_entry__updated_at'],
+                'updated_at': entry['submitted_at'],
                 'active_layer': entry['id']
             } for entry in list(selected)]
         return response.Response(response_data, content_type='application/json', status=status.HTTP_200_OK)
