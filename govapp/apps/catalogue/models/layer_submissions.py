@@ -214,5 +214,18 @@ class LayerSubmission(mixins.RevisionedMixin):
             # Failure!
             # Do not update Catalogue Entry
             # Create New Inactive Layer Submission with Status DECLINED
+            if self.catalogue_entry.is_declined():
+                log.warning(
+                    f"LayerSubmission [{self}] declined: CatalogueEntry [{self.catalogue_entry}] "
+                    f"is in DECLINED status."
+                )
+            elif self.hash != attributes_hash:
+                log.warning(
+                    f"LayerSubmission [{self}] declined: attributes hash mismatch. "
+                    f"Submission hash: [{self.hash}], "
+                    f"CatalogueEntry attributes hash: [{attributes_hash}]. "
+                    f"This typically means the column structure of the uploaded file differs "
+                    f"from the previously accepted file."
+                )
             self.status = LayerSubmissionStatus.DECLINED
             self.save()
