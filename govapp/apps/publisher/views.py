@@ -42,6 +42,9 @@ from govapp.apps.publisher import permissions
 from govapp.apps.publisher import serializers
 from govapp.apps.publisher import geoserver_manager
 from govapp.apps.publisher.models.geoserver_queues import GeoServerQueueStatus
+from govapp.apps.publisher.models.geoserver_layer_groups import GeoServerLayerGroup
+from govapp.apps.publisher.serializers.geoserver_layer_group import GeoServerLayerGroupSerializer
+from govapp.apps.publisher import geoserver_layergroup_publisher
 
 # Typing
 from typing import cast, Any
@@ -678,7 +681,7 @@ class GeoServerPublishChannelViewSet(
     viewsets.GenericViewSet,
 ):
     """GeoServer Publish Channel View Set."""
-    queryset = models.publish_channels.GeoServerPublishChannel.objects.all()
+    queryset = models.publish_channels.GeoServerPublishChannel.objects.all().prefetch_related('layer_group_entries__layer_group')
     serializer_class = serializers.publish_channels.GeoServerPublishChannelSerializer
     serializer_classes = {"create": serializers.publish_channels.GeoServerPublishChannelCreateSerializer}
     filterset_class = filters.GeoServerPublishChannelFilter
@@ -1298,6 +1301,107 @@ class GeoServerGroupViewSet(
                 
         except Exception as e:
             return Response({"error": f"An error occurred while updating the group: {str(e)}"}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class GeoServerLayerGroupViewSet(
+    viewsets.mixins.CreateModelMixin,
+    viewsets.mixins.DestroyModelMixin,
+    viewsets.mixins.RetrieveModelMixin,
+    viewsets.mixins.ListModelMixin,
+    viewsets.mixins.UpdateModelMixin,
+    viewsets.GenericViewSet,
+):
+    """ViewSet for managing GeoServer Layer Groups."""
+
+    queryset = GeoServerLayerGroup.objects.select_related(
+        "workspace", "geoserver_pool"
+    ).prefetch_related("entries__publish_channel__workspace")
+    serializer_class = GeoServerLayerGroupSerializer
+    permission_classes = [accounts_permissions.CanAccessOptionMenu]
+    pagination_class = DatatablesPageNumberPagination
+    renderer_classes = [DatatablesRenderer, JSONRenderer]
+    filter_backends = [rest_filters.SearchFilter]
+    search_fields = ["name", "title", "workspace__name", "geoserver_pool__name"]
+
+    def get_renderers(self):
+        # DatatablesRenderer is only needed for the list action (pagination wrapper).
+        # For all other actions (retrieve, create, update, destroy, publish) return
+        # plain JSONRenderer so that the response is a bare object without the
+        # {"data": {...}} wrapper that DatatablesRenderer adds to single objects.
+        if self.action == "list":
+            return [DatatablesRenderer(), JSONRenderer()]
+        return [JSONRenderer()]
+
+    def destroy(self, request, *args, **kwargs):
+        """Delete layer group from GeoServer before removing from the database."""
+        layer_group = self.get_object()
+        success, exc = geoserver_layergroup_publisher.delete_from_geoserver(layer_group)
+        if not success:
+            return Response(
+                {"error": f"Failed to remove layer group from GeoServer: {exc}"},
+                status=status.HTTP_502_BAD_GATEWAY,
+            )
+        layer_group.delete()
+        return Response(status=status.HTTP_204_NO_CONTENT)
+
+    @action(detail=True, methods=["post"])
+    def publish(self, request, pk=None):
+        """Publish the layer group to GeoServer."""
+        layer_group = self.get_object()
+        success, exc = geoserver_layergroup_publisher.publish(layer_group)
+        if not success:
+            # ValueError indicates a validation problem (e.g. missing layers in
+            # GeoServer); return 400 so the UI can display a meaningful message.
+            # Other exceptions indicate a GeoServer communication error (502).
+            status_code = (
+                status.HTTP_400_BAD_REQUEST
+                if isinstance(exc, ValueError)
+                else status.HTTP_502_BAD_GATEWAY
+            )
+            return Response(
+                {"error": str(exc)},
+                status=status_code,
+            )
+        # Refresh from DB so published_name is current in the response.
+        layer_group.refresh_from_db()
+        serializer = self.get_serializer(layer_group)
+        return Response(serializer.data)
+
+
+class GeoServerLayerGroupEntryViewSet(
+    viewsets.mixins.CreateModelMixin,
+    viewsets.mixins.DestroyModelMixin,
+    viewsets.mixins.UpdateModelMixin,
+    viewsets.GenericViewSet,
+):
+    """ViewSet for managing individual GeoServerLayerGroupEntry records.
+
+    Used by the frontend to create, update (order), and delete member entries
+    without going through the parent group endpoint.
+    """
+
+    from govapp.apps.publisher.models.geoserver_layer_groups import GeoServerLayerGroupEntry
+    from govapp.apps.publisher.serializers.geoserver_layer_group import GeoServerLayerGroupEntrySerializer
+
+    queryset = GeoServerLayerGroupEntry.objects.all()
+    serializer_class = GeoServerLayerGroupEntrySerializer
+    permission_classes = [accounts_permissions.CanAccessOptionMenu]
+
+    def perform_create(self, serializer):
+        """Convert model-level ValidationError to a DRF 400 response.
+
+        GeoServerLayerGroupEntry.save() calls full_clean() which raises
+        django.core.exceptions.ValidationError when the channel's workspace
+        or pool does not match the parent group.  DRF does not catch that
+        exception automatically, causing a 500.  We re-raise it as a DRF
+        ValidationError so the client receives a 400 with the error detail.
+        """
+        from django.core.exceptions import ValidationError as DjangoValidationError
+        from rest_framework.exceptions import ValidationError as DRFValidationError
+        try:
+            serializer.save()
+        except DjangoValidationError as exc:
+            raise DRFValidationError(detail=exc.message_dict if hasattr(exc, 'message_dict') else exc.messages)
 
 
 class GeoServerLayerHealthcheckViewSet(viewsets.ReadOnlyModelViewSet):

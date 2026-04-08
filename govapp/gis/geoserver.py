@@ -1380,6 +1380,168 @@ class GeoServer:
         return used_styles
 
     @handle_http_exceptions(log)
+    def get_layer_group(self, workspace: str, name: str) -> Optional[dict]:
+        """Retrieve a layer group from GeoServer, or None if it does not exist.
+
+        Args:
+            workspace (str): Workspace that owns the layer group.
+            name (str): Name of the layer group.
+
+        Returns:
+            Optional[dict]: Parsed JSON response from GeoServer, or None when
+                the group does not exist (404).
+        """
+        url = f"{self.service_url}/rest/workspaces/{workspace}/layergroups/{name}"
+        log.info(f"Retrieving layer group '{workspace}:{name}' from GeoServer: [{self.service_url}]")
+
+        response = httpx.get(
+            url=url,
+            auth=self.auth,
+            headers=self.headers_json,
+            timeout=120.0,
+        )
+
+        if response.status_code == 404:
+            log.info(f"Layer group '{workspace}:{name}' not found in GeoServer.")
+            return None
+
+        response.raise_for_status()
+        return response.json()
+
+    def _build_layer_group_payload(
+        self,
+        name: str,
+        workspace: str,
+        layer_names: list[str],
+        title: Optional[str] = None,
+        abstract: Optional[str] = None,
+    ) -> str:
+        """Build the JSON payload for a GeoServer layer group create/update request.
+
+        Args:
+            name (str): Layer group name.
+            workspace (str): Workspace name.
+            layer_names (list[str]): Ordered list of fully-qualified layer names
+                in the format ``"workspace:layername"``.
+            title (Optional[str]): Human-readable title.
+            abstract (Optional[str]): Description.
+
+        Returns:
+            str: JSON string suitable for use as an HTTP request body.
+        """
+        publishables = [
+            {"@type": "layer", "name": ln} for ln in layer_names
+        ]
+        # GeoServer requires one style entry per publishable (empty string = default style).
+        styles = [{"name": ""} for _ in layer_names]
+
+        payload: dict = {
+            "layerGroup": {
+                "name": name,
+                "mode": "SINGLE",
+                "publishables": {"published": publishables},
+                "styles": {"style": styles},
+            }
+        }
+
+        if title:
+            payload["layerGroup"]["title"] = title
+        if abstract:
+            payload["layerGroup"]["abstractTxt"] = abstract
+
+        return json.dumps(payload)
+
+    @handle_http_exceptions(log)
+    def create_layer_group(
+        self,
+        workspace: str,
+        name: str,
+        layer_names: list[str],
+        title: Optional[str] = None,
+        abstract: Optional[str] = None,
+    ) -> None:
+        """Create a new layer group in GeoServer.
+
+        Args:
+            workspace (str): Target workspace.
+            name (str): Name of the layer group to create.
+            layer_names (list[str]): Ordered list of fully-qualified layer names
+                in the format ``"workspace:layername"``.
+            title (Optional[str]): Human-readable title.
+            abstract (Optional[str]): Description.
+        """
+        url = f"{self.service_url}/rest/workspaces/{workspace}/layergroups"
+        payload = self._build_layer_group_payload(name, workspace, layer_names, title, abstract)
+        log.info(f"Creating layer group '{workspace}:{name}' in GeoServer: [{self.service_url}]")
+        log.debug(f"Payload: {payload}")
+
+        response = httpx.post(
+            url=url,
+            auth=self.auth,
+            headers=self.headers_json,
+            content=payload,
+            timeout=120.0,
+        )
+
+        response.raise_for_status()
+        log.info(f"Layer group '{workspace}:{name}' created successfully.")
+
+    @handle_http_exceptions(log)
+    def update_layer_group(
+        self,
+        workspace: str,
+        name: str,
+        layer_names: list[str],
+        title: Optional[str] = None,
+        abstract: Optional[str] = None,
+    ) -> None:
+        """Update an existing layer group in GeoServer.
+
+        Args:
+            workspace (str): Workspace that owns the layer group.
+            name (str): Name of the layer group to update.
+            layer_names (list[str]): Ordered list of fully-qualified layer names
+                in the format ``"workspace:layername"``.
+            title (Optional[str]): Human-readable title.
+            abstract (Optional[str]): Description.
+        """
+        url = f"{self.service_url}/rest/workspaces/{workspace}/layergroups/{name}"
+        payload = self._build_layer_group_payload(name, workspace, layer_names, title, abstract)
+        log.info(f"Updating layer group '{workspace}:{name}' in GeoServer: [{self.service_url}]")
+        log.debug(f"Payload: {payload}")
+
+        response = httpx.put(
+            url=url,
+            auth=self.auth,
+            headers=self.headers_json,
+            content=payload,
+            timeout=120.0,
+        )
+
+        response.raise_for_status()
+        log.info(f"Layer group '{workspace}:{name}' updated successfully.")
+
+    @handle_http_exceptions(log)
+    def delete_layer_group(self, workspace: str, name: str) -> None:
+        """Delete a layer group from GeoServer.
+
+        Args:
+            workspace (str): Workspace that owns the layer group.
+            name (str): Name of the layer group to delete.
+        """
+        url = f"{self.service_url}/rest/workspaces/{workspace}/layergroups/{name}"
+        log.info(f"Deleting layer group '{workspace}:{name}' from GeoServer: [{self.service_url}]")
+
+        response = httpx.delete(
+            url=url,
+            auth=self.auth,
+            timeout=120.0,
+        )
+
+        response.raise_for_status()
+        log.info(f"Layer group '{workspace}:{name}' deleted successfully.")
+
+    @handle_http_exceptions(log)
     def delete_style(self, style_name: str, purge: bool = True) -> None:
         """
         Delete a single style by its name from GeoServer.

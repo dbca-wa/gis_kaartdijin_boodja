@@ -1690,6 +1690,15 @@ var kbpublish = {
                             }
                             html+= "</td>";
                             html+= "<td>" + yes_no_icon + "</td>";
+                            html+= "<td>";
+                            if (geoserver_publish_channel.layer_groups && geoserver_publish_channel.layer_groups.length > 0) {
+                                html += geoserver_publish_channel.layer_groups.map(function(lg) {
+                                    return lg.layer_group__name;
+                                }).join(', ');
+                            } else {
+                                html += '—';
+                            }
+                            html+= "</td>";
                             html+= " <td class='text-end'>";
                             if (kbpublish.var.has_edit_access == true) {
                                 html+= "<button class='btn btn-primary btn-sm publish-geoserver-update' data-json='" + button_json + "'>Update</button> ";
@@ -1727,10 +1736,10 @@ var kbpublish = {
                             });
                         }
                     } else {
-                        $('#publish-geoserver-tbody').empty().append("<tr><td colspan='8' class='text-center'>No results found</td></tr>");
+                        $('#publish-geoserver-tbody').empty().append("<tr><td colspan='9' class='text-center'>No results found</td></tr>");
                     }
                 } else {
-                        $('#publish-geoserver-tbody').empty().append("<tr><td colspan='8' class='text-center'>No results found</td></tr>");
+                        $('#publish-geoserver-tbody').empty().append("<tr><td colspan='9' class='text-center'>No results found</td></tr>");
                 }
             },
             error: function (error) {

@@ -653,6 +653,21 @@ class LogFileView(UserPassesTestMixin, base.TemplateView):
 
         return context
 
+class GeoServerLayerGroupsView(base.TemplateView):
+    """Page view for GeoServer Layer Groups management."""
+
+    template_name = "govapp/geoserver_layer_groups.html"
+
+    def get(self, request: http.HttpRequest, *args: Any, **kwargs: Any) -> http.HttpResponse:
+        from govapp.apps.publisher.models.geoserver_pools import GeoServerPool
+        from govapp.apps.publisher.models.workspaces import Workspace
+        context: dict = {
+            "workspaces": Workspace.objects.all().order_by("name"),
+            "geoserver_pools": GeoServerPool.objects.all().order_by("name"),
+        }
+        return shortcuts.render(request, self.template_name, context)
+
+
 class GeoServerGroupsView(base.TemplateView):
     template_name = "govapp/usergroups.html"
 
