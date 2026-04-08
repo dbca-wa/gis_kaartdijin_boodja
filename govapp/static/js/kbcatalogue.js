@@ -538,6 +538,7 @@ var kbcatalogue = {
                             html += "<td>" + catalogue_entry.name + "</td>";
                             html += "<td>" + kbcatalogue.var.spatial_type[catalogue_entry.type] + "</td>";
                             html += "<td>" + (catalogue_entry.permission_type == 1 ? utils.public_icon() + catalogue_entry.permission_type_str: utils.restricted_icon() + catalogue_entry.permission_type_str) + "</td>"
+                            html += "<td>" + (catalogue_entry.default_crs != null ? catalogue_entry.default_crs : "") + "</td>"
                             html += "<td>" + (catalogue_entry.custodian_name != null ? catalogue_entry.custodian_name : "") + "</td>"
                             html += "<td><span class='" + kbcatalogue.var.catalogue_status[catalogue_entry.status].class + "'>" + kbcatalogue.var.catalogue_status[catalogue_entry.status].name + "<span></td>";
                             html += "<td>" + catalogue_entry.updated_at + "</td>";
@@ -553,12 +554,12 @@ var kbcatalogue = {
                         $('.publish-table-button').hide();
 
                     } else {
-                        $('#publish-tbody').html("<tr><td colspan='8' class='text-center'>No results found</td></tr>");
+                        $('#publish-tbody').html("<tr><td colspan='9' class='text-center'>No results found</td></tr>");
                     }
 
                     common_pagination.init(response.count, params, kbcatalogue.get_catalogue, $('#paging_navi'));
                 } else {
-                      $('#publish-tbody').html("<tr><td colspan='8' class='text-center'>No results found</td></tr>");
+                      $('#publish-tbody').html("<tr><td colspan='9' class='text-center'>No results found</td></tr>");
                 }
 
                 $( ".publish-to-geoserver-btn" ).click(function() {
