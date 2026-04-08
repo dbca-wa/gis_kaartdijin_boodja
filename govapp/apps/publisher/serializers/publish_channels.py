@@ -111,11 +111,10 @@ class GeoServerPublishChannelSerializer(serializers.ModelSerializer):
 
     def get_layer_groups(self, obj):
         """Return list of layer groups this channel belongs to."""
-        return list(
-            obj.layer_group_entries
-            .select_related('layer_group')
-            .values('layer_group__id', 'layer_group__name')
-        )
+        return [
+            {'layer_group__id': entry.layer_group_id, 'layer_group__name': entry.layer_group.name}
+            for entry in obj.layer_group_entries.all()
+        ]
 
     def validate(self, data):
         _validate_bbox(data)

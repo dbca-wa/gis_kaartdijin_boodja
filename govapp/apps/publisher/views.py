@@ -681,7 +681,7 @@ class GeoServerPublishChannelViewSet(
     viewsets.GenericViewSet,
 ):
     """GeoServer Publish Channel View Set."""
-    queryset = models.publish_channels.GeoServerPublishChannel.objects.all()
+    queryset = models.publish_channels.GeoServerPublishChannel.objects.all().prefetch_related('layer_group_entries__layer_group')
     serializer_class = serializers.publish_channels.GeoServerPublishChannelSerializer
     serializer_classes = {"create": serializers.publish_channels.GeoServerPublishChannelCreateSerializer}
     filterset_class = filters.GeoServerPublishChannelFilter
