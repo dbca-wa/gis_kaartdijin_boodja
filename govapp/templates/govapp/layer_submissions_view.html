@@ -40,7 +40,13 @@
                         </div>
                         <div class='col-12 p-3 border-bottom'>
                               <b>Status</b><br>
-                              {{ layer_submission_obj.status_name }}
+                              {% if layer_submission_obj.status == 2 %}
+                                    <span class="badge badge-pill bg-success">{{ layer_submission_obj.status_name }}</span>
+                              {% elif layer_submission_obj.status == 3 %}
+                                    <span class="badge badge-pill bg-danger">{{ layer_submission_obj.status_name }}</span>
+                              {% else %}
+                                    <span class="badge badge-pill bg-secondary">{{ layer_submission_obj.status_name }}</span>
+                              {% endif %}
                         </div>
                   </div>
             </div>

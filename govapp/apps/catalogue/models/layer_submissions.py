@@ -13,6 +13,7 @@ from govapp.common import mixins
 from govapp.apps.catalogue import utils
 from govapp.apps.catalogue.models import catalogue_entries
 from govapp.apps.catalogue.models import layer_metadata
+from govapp.apps.logs import utils as logs_utils
 
 # Typing
 from typing import cast
@@ -214,5 +215,31 @@ class LayerSubmission(mixins.RevisionedMixin):
             # Failure!
             # Do not update Catalogue Entry
             # Create New Inactive Layer Submission with Status DECLINED
+            if self.catalogue_entry.is_declined():
+                decline_reason = (
+                    f"Layer submission LM{self.pk} was declined: "
+                    f"the catalogue entry '{self.catalogue_entry}' is already in DECLINED status."
+                )
+                log.warning(decline_reason)
+            elif self.hash != attributes_hash:
+                decline_reason = (
+                    f"Layer submission LM{self.pk} was declined: "
+                    f"the column structure of the uploaded file does not match the previously accepted file "
+                    f"(attributes hash mismatch)."
+                )
+                log.warning(
+                    f"{decline_reason} "
+                    f"Submission hash: [{self.hash}], "
+                    f"CatalogueEntry attributes hash: [{attributes_hash}]."
+                )
+            else:
+                decline_reason = f"Layer submission LM{self.pk} was declined."
+                log.warning(decline_reason)
+            logs_utils.add_to_actions_log(
+                user=None,
+                model=self.catalogue_entry,
+                action=decline_reason,
+                default_to_system=True,
+            )
             self.status = LayerSubmissionStatus.DECLINED
             self.save()

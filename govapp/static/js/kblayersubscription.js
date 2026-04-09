@@ -712,6 +712,9 @@ var kblayersubscription = {
             kblayersubscription.construct_source_layers_table(catalogue_entries);  // This is displayed in the add/edit modal
         } catch (error){
             console.error('Error', error)
+            const summaryEl = $('#missing_layers_summary');
+            summaryEl.html(`<span class="badge bg-danger">&#10007; Could not retrieve layer list from server</span>`);
+            summaryEl.show();
         }
     },
     isLocked: function(value) {
@@ -807,6 +810,23 @@ var kblayersubscription = {
                 $(thead).addClass('table-dark');
             }
         });
+
+        // Update missing layers summary in the Actions sidebar
+        const displayedEntries = catalogue_entries.filter(entry => !entry.is_custom_query);
+        const sourceLayerNames = new Set(kblayersubscription.var.source_layers.map(layer => layer.name));
+        const missingCount = displayedEntries.filter(entry => !sourceLayerNames.has(entry.mapping_name)).length;
+        const totalCount = displayedEntries.length;
+        const summaryEl = $('#missing_layers_summary');
+        if (totalCount > 0) {
+            if (missingCount === 0) {
+                summaryEl.html(`<span class="badge bg-success">&#10003; All ${totalCount} layer(s) found on server</span>`);
+            } else {
+                summaryEl.html(`<span class="badge bg-warning text-dark">&#9888; ${missingCount} / ${totalCount} layer(s) not found on server</span>`);
+            }
+            summaryEl.show();
+        } else {
+            summaryEl.hide();
+        }
 
         // Step 4: Add event listener for Select buttons
         $(document).on('click', '.select-existing-layer-btn', function() {
