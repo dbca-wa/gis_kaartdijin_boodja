@@ -1342,7 +1342,7 @@ class GeoServer:
                 remaining = []
                 if ft_list_response.status_code == 200:
                     ft_list_data = ft_list_response.json()
-                    remaining = (ft_list_data.get('featureTypes', {}) or {}).get('featureType', [])
+                    remaining = (ft_list_data.get('featureTypes', {}) or {}).get('featureType', []) or []
                 log.info(f"Store [{store_name}] has {len(remaining)} remaining featuretype(s) after deletion.")
                 if not remaining:
                     store_delete_url = (
