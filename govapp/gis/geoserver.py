@@ -916,17 +916,35 @@ class GeoServer:
             headers=self.headers_json,
             timeout=120.0
         )
+        log.info(f'Layer existence check response: {response.status_code}')
         if response.status_code == 200:
-            log.info(f'Layer: [{layer_name}] exists.  Perform delete request.')
-            response = httpx.delete(
+            log.info(f'Layer: [{layer_name}] exists. Perform delete request.')
+            delete_response = httpx.delete(
                 url=layer_get_url+"?recurse=true",
                 auth=(self.username, self.password),
-                #data=xml_data,
                 headers=self.headers_json,
                 timeout=120.0
             )
-        else:
+            log.info(f'Delete response: {delete_response.status_code}: {delete_response.text}')
+            delete_response.raise_for_status()
+        elif response.status_code == 404:
             log.info(f'Layer: [{layer_name}] does not exist.')
+        else:
+            log.warning(
+                f'Unexpected GET response for layer [{layer_name}]: '
+                f'{response.status_code}: {response.text}. '
+                f'Attempting delete anyway to avoid "already exists" conflict.'
+            )
+            delete_response = httpx.delete(
+                url=layer_get_url+"?recurse=true",
+                auth=(self.username, self.password),
+                headers=self.headers_json,
+                timeout=120.0
+            )
+            log.info(f'Delete response: {delete_response.status_code}: {delete_response.text}')
+            # 404 is acceptable (layer did not exist); anything else that is an error should raise
+            if delete_response.status_code != 404:
+                delete_response.raise_for_status()
 
         # Create the layer
         url = f"{self.service_url}/rest/workspaces/{workspace}/datastores/{store_name}/featuretypes"
