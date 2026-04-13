@@ -47,7 +47,7 @@ var kbgeoserverweb = {
                 table.set_tbody(tbody, response.results, [
                     {id:"text"},
                     {queue_type_label:'text'},
-                    {name:"text"}, 
+                    {name: {type: 'link', url: (row) => `/publish/${row.publish_entry}/`}},
                     {submitter:'text'}, 
                     {status:'text'}, 
                     {success:'boolean'}, 
