@@ -916,17 +916,35 @@ class GeoServer:
             headers=self.headers_json,
             timeout=120.0
         )
+        log.info(f'Layer existence check response: {response.status_code}')
         if response.status_code == 200:
-            log.info(f'Layer: [{layer_name}] exists.  Perform delete request.')
-            response = httpx.delete(
+            log.info(f'Layer: [{layer_name}] exists. Perform delete request.')
+            delete_response = httpx.delete(
                 url=layer_get_url+"?recurse=true",
                 auth=(self.username, self.password),
-                #data=xml_data,
                 headers=self.headers_json,
                 timeout=120.0
             )
-        else:
+            log.info(f'Delete response: {delete_response.status_code}: {delete_response.text}')
+            delete_response.raise_for_status()
+        elif response.status_code == 404:
             log.info(f'Layer: [{layer_name}] does not exist.')
+        else:
+            log.warning(
+                f'Unexpected GET response for layer [{layer_name}]: '
+                f'{response.status_code}: {response.text}. '
+                f'Attempting delete anyway to avoid "already exists" conflict.'
+            )
+            delete_response = httpx.delete(
+                url=layer_get_url+"?recurse=true",
+                auth=(self.username, self.password),
+                headers=self.headers_json,
+                timeout=120.0
+            )
+            log.info(f'Delete response: {delete_response.status_code}: {delete_response.text}')
+            # 404 is acceptable (layer did not exist); anything else that is an error should raise
+            if delete_response.status_code != 404:
+                delete_response.raise_for_status()
 
         # Create the layer
         url = f"{self.service_url}/rest/workspaces/{workspace}/datastores/{store_name}/featuretypes"
@@ -1281,37 +1299,119 @@ class GeoServer:
             log.info(f"Layer [{layer_name}] uses the following styles: {list(styles_to_check)}. check them for cleanup after deletion.")
             # --- END PRE-DELETION ---
 
-            # --- EXECUTION: DELETE LAYER AND STORE ---
-            # Delete Layer
-            log.info(f"Deleting layer resource: [{layer_name}]...")
-            layer_delete_url = f"{self.service_url}/rest/layers/{layer_name}"
-            response = httpx.delete(
-                        url=layer_delete_url,
-                        auth=(self.username, self.password),
-                        headers=self.headers_json,
-                        timeout=120.0
-                    )
-            response.raise_for_status()
-            if response.status_code == 200:
-                log.info(f'Layer: [{layer_name}] deleted successfully from the geoserver: [{self.service_url}].')
-            else:
-                log.error(f'Failed to delete layer: [{layer_name}].  {response.status_code} {response.text}')
+            # --- EXECUTION: DELETE FEATURETYPE (recurse=true also removes the layer) ---
+            # Parse the real workspace, store, and featuretype names from the resource href.
+            # resource['name'] is "workspace:layername" which does NOT equal the store name for PostGIS.
+            # resource['href'] is ".../workspaces/{ws}/datastores/{store}/featuretypes/{ft}.json"
+            # and is the only reliable source of the true store name.
+            resource = layer_details_response['layer']['resource']
+            resource_href = resource.get('href', '')
+            href_parts = resource_href.rstrip('/').split('/')
+            layer_type = layer_details_response['layer']['type']
 
-            # Delete store
-            workspace_and_layer = layer_details_response['layer']['resource']['name'].split(':')
-            if layer_details_response['layer']['type'] == 'VECTOR':
-                store_delete_url = f"{self.service_url}/rest/workspaces/{ workspace_and_layer[0] }/datastores/{ workspace_and_layer[1] }"
-            else:
-                store_delete_url = f"{self.service_url}/rest/workspaces/{ workspace_and_layer[0] }/coveragestores/{ workspace_and_layer[1] }"
-            response = httpx.delete(
-                        url=store_delete_url + '?recurse=true',
+            if layer_type == 'VECTOR' and 'featuretypes' in href_parts:
+                ft_idx = href_parts.index('featuretypes')
+                workspace_name = href_parts[href_parts.index('workspaces') + 1]
+                store_name = href_parts[ft_idx - 1]
+                ft_name = href_parts[ft_idx + 1].replace('.json', '')
+                featuretype_delete_url = (
+                    f"{self.service_url}/rest/workspaces/{workspace_name}"
+                    f"/datastores/{store_name}/featuretypes/{ft_name}?recurse=true"
+                )
+                log.info(f"Deleting featuretype [{ft_name}] from store [{store_name}] (recurse=true removes layer too)...")
+                response = httpx.delete(
+                    url=featuretype_delete_url,
+                    auth=(self.username, self.password),
+                    headers=self.headers_json,
+                    timeout=120.0
+                )
+                response.raise_for_status()
+                log.info(f"Featuretype [{ft_name}] deleted successfully.")
+
+                # Delete the store only if no featuretypes remain (safe for both Spatial File and PostGIS).
+                store_ft_url = (
+                    f"{self.service_url}/rest/workspaces/{workspace_name}"
+                    f"/datastores/{store_name}/featuretypes.json"
+                )
+                ft_list_response = httpx.get(
+                    url=store_ft_url,
+                    auth=(self.username, self.password),
+                    headers=self.headers_json,
+                    timeout=120.0
+                )
+                remaining = []
+                if ft_list_response.status_code == 200:
+                    ft_list_data = ft_list_response.json()
+                    remaining = (ft_list_data.get('featureTypes', {}) or {}).get('featureType', []) or []
+                log.info(f"Store [{store_name}] has {len(remaining)} remaining featuretype(s) after deletion.")
+                if not remaining:
+                    store_delete_url = (
+                        f"{self.service_url}/rest/workspaces/{workspace_name}"
+                        f"/datastores/{store_name}?recurse=true"
+                    )
+                    log.info(f"Store [{store_name}] is now empty. Deleting store...")
+                    response = httpx.delete(
+                        url=store_delete_url,
                         auth=(self.username, self.password),
                         headers=self.headers_json,
                         timeout=120.0
                     )
-            response.raise_for_status()
-            log.info(f"Store [{workspace_and_layer[1]}] deleted successfully.")
-            # --- END: EXECUTION: DELETE LAYER AND STORE ---
+                    response.raise_for_status()
+                    log.info(f"Store [{store_name}] deleted successfully.")
+                else:
+                    log.info(f"Store [{store_name}] still has featuretypes. Keeping store.")
+
+            elif layer_type == 'RASTER' and 'coverages' in href_parts:
+                ws_idx = href_parts.index('workspaces')
+                workspace_name = href_parts[ws_idx + 1]
+                cov_idx = href_parts.index('coverages')
+                store_name = href_parts[cov_idx - 1]
+                coverage_name = href_parts[cov_idx + 1].replace('.json', '')
+                coverage_delete_url = (
+                    f"{self.service_url}/rest/workspaces/{workspace_name}"
+                    f"/coveragestores/{store_name}/coverages/{coverage_name}?recurse=true"
+                )
+                log.info(f"Deleting coverage [{coverage_name}] from store [{store_name}]...")
+                response = httpx.delete(
+                    url=coverage_delete_url,
+                    auth=(self.username, self.password),
+                    headers=self.headers_json,
+                    timeout=120.0
+                )
+                response.raise_for_status()
+                log.info(f"Coverage [{coverage_name}] deleted successfully.")
+
+                # Raster stores are always 1:1 with a file — delete the store too.
+                store_delete_url = (
+                    f"{self.service_url}/rest/workspaces/{workspace_name}"
+                    f"/coveragestores/{store_name}?recurse=true"
+                )
+                log.info(f"Deleting coveragestore [{store_name}]...")
+                response = httpx.delete(
+                    url=store_delete_url,
+                    auth=(self.username, self.password),
+                    headers=self.headers_json,
+                    timeout=120.0
+                )
+                response.raise_for_status()
+                log.info(f"Coveragestore [{store_name}] deleted successfully.")
+
+            else:
+                # Fallback: href could not be parsed — delete the layer only.
+                log.warning(
+                    f"Could not parse store name from href [{resource_href}] for layer type [{layer_type}]. "
+                    f"Falling back to deleting layer only via /rest/layers/{layer_name}."
+                )
+                layer_delete_url = f"{self.service_url}/rest/layers/{layer_name}"
+                response = httpx.delete(
+                    url=layer_delete_url,
+                    auth=(self.username, self.password),
+                    headers=self.headers_json,
+                    timeout=120.0
+                )
+                response.raise_for_status()
+                log.info(f"Layer [{layer_name}] deleted (fallback path).")
+            # --- END: EXECUTION: DELETE FEATURETYPE ---
 
             # --- POST-DELETION: CLEANUP STYLES ---
             if not styles_to_check:
