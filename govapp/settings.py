@@ -228,16 +228,14 @@ LOGGING = {
             'class': 'logging.handlers.RotatingFileHandler',
             'filename': LOG_FILE_PATH,
             'formatter': 'verbose2',
-            'maxBytes': 5242880,
-            'backupCount': 30
+            'maxBytes': 524288000,
         },
         'file_for_sql': {
             'level': 'DEBUG',
             'class': 'logging.handlers.RotatingFileHandler',
             'filename': os.path.join(BASE_DIR, 'logs', 'kaartdijin_boodja_sql.log'),
             'formatter': 'verbose2',
-            'maxBytes': 5242880,
-            'backupCount': 30
+            'maxBytes': 524288000,
         },
     },
     'loggers': {
