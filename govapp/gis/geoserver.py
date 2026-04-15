@@ -557,7 +557,11 @@ class GeoServer:
                 timeout=(15, 60.0),
             )
             log.info(f"Datastore response: '{resp_store.status_code}: {resp_store.text}'")
-            resp_store.raise_for_status()
+            if not resp_store.ok:
+                raise requests.HTTPError(
+                    f"{resp_store.status_code} {resp_store.reason} at {datastores_url}: {resp_store.text}",
+                    response=resp_store,
+                )
 
             # Step 2: create the featuretype (layer) from the store.
             # GeoServer reads the GeoPackage file during this step, which can be slow
@@ -569,7 +573,11 @@ class GeoServer:
                 timeout=(15, 3000.0),
             )
             log.info(f"Featuretype response: '{resp_ft.status_code}: {resp_ft.text}'")
-            resp_ft.raise_for_status()
+            if not resp_ft.ok:
+                raise requests.HTTPError(
+                    f"{resp_ft.status_code} {resp_ft.reason} at {featuretype_url}: {resp_ft.text}",
+                    response=resp_ft,
+                )
 
         if memory_map_size is not None:
             try:
@@ -670,13 +678,13 @@ class GeoServer:
                 "url": file_url,
             }
         }
-        # nativeName must match the GeoTIFF's internal coverage name, which GeoServer
-        # derives from the filename stem (e.g. "Tiff-Test-20260319_15.20260319_155927...").
-        native_name = file_path_on_volume.stem
+        # Do not specify nativeName — let GeoServer auto-discover the coverage name
+        # from the store. Explicitly setting nativeName to the filename stem is
+        # unreliable when the stem contains dots (e.g. timestamped filenames), because
+        # GeoServer may derive a different internal coverage name.
         coverage_payload = {
             "coverage": {
                 "name": layer,
-                "nativeName": native_name,
             }
         }
 
@@ -691,7 +699,11 @@ class GeoServer:
                 timeout=(15, 60.0),
             )
             log.info(f"Coverage store response: '{resp_store.status_code}: {resp_store.text}'")
-            resp_store.raise_for_status()
+            if not resp_store.ok:
+                raise requests.HTTPError(
+                    f"{resp_store.status_code} {resp_store.reason} at {stores_url}: {resp_store.text}",
+                    response=resp_store,
+                )
 
             # Step 2: create the coverage (layer) from the store.
             # GeoServer reads the GeoTIFF file during this step, which can be slow
@@ -703,7 +715,11 @@ class GeoServer:
                 timeout=(15, 3000.0),
             )
             log.info(f"Coverage response: '{resp_coverage.status_code}: {resp_coverage.text}'")
-            resp_coverage.raise_for_status()
+            if not resp_coverage.ok:
+                raise requests.HTTPError(
+                    f"{resp_coverage.status_code} {resp_coverage.reason} at {coverage_url}: {resp_coverage.text}",
+                    response=resp_coverage,
+                )
 
     @handle_http_exceptions(log)
     def create_layer_from_coveragestore(self, workspace: str, layer: str) -> None:
