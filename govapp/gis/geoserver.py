@@ -678,13 +678,13 @@ class GeoServer:
                 "url": file_url,
             }
         }
-        # Do not specify nativeName — let GeoServer auto-discover the coverage name
-        # from the store. Explicitly setting nativeName to the filename stem is
-        # unreliable when the stem contains dots (e.g. timestamped filenames), because
-        # GeoServer may derive a different internal coverage name.
+        # nativeName must match the GeoTIFF's internal coverage name, which GeoServer
+        # derives from the filename stem.
+        native_name = file_path_on_volume.stem
         coverage_payload = {
             "coverage": {
                 "name": layer,
+                "nativeName": native_name,
             }
         }
 

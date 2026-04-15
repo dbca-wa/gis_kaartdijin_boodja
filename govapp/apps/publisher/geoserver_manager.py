@@ -19,7 +19,7 @@ from govapp.apps.publisher.models.geoserver_queues import GeoServerQueueStatus, 
 from govapp.apps.publisher.models import geoserver_pools
 from govapp.apps.publisher import geoserver_publisher
 from govapp.apps.publisher.models.geoserver_roles_groups import GeoServerGroup, GeoServerRole
-from govapp.apps.publisher.models.publish_channels import GeoServerPublishChannel
+from govapp.apps.publisher.models.publish_channels import GeoServerPublishChannel, StoreType
 from govapp.apps.publisher.models.workspaces import Workspace
 from govapp.apps.catalogue.models.catalogue_entries import CatalogueEntryType
 from govapp.gis import geoserver
@@ -279,9 +279,14 @@ class GeoServerQueueExcutor:
             converted_path = channel.convert_layer()
             queue_item.converted_file_path = str(converted_path)
             queue_item.save(update_fields=['converted_file_path'])
-            self._add_publishing_log(
-                f"[{queue_item.publish_entry.name}] File converted successfully: {converted_path}"
-            )
+            if channel.store_type == StoreType.GEOTIFF:
+                self._add_publishing_log(
+                    f"[{queue_item.publish_entry.name}] File ready (no conversion needed for GeoTIFF): {converted_path}"
+                )
+            else:
+                self._add_publishing_log(
+                    f"[{queue_item.publish_entry.name}] File converted successfully: {converted_path}"
+                )
         except Exception as e:
             self.result_status = GeoServerQueueStatus.FAILED
             self.result_success = False
