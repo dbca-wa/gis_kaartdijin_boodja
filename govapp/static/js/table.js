@@ -70,12 +70,18 @@ var table={
                     row.append(this._make_text_cell(obj[key]));
                 else if(columns[i][key] == 'boolean')
                     row.append(this._make_boolean_cell(obj[key]));
+                else if(typeof columns[i][key] === 'object' && columns[i][key].type == 'link')
+                    row.append(this._make_link_cell(obj[key], columns[i][key].url(obj)));
             }
         }
         return row;
     },
     _make_text_cell: function(text){
         return $('<td>').text(text);
+    },
+    _make_link_cell: function(text, url){
+        let a = $('<a>').attr('href', url).attr('style', 'text-decoration: none;').text(text);
+        return $('<td>').append(a);
     },
     _make_switch_cell: function(checked, disabled=true){
         let div = $('<div>').attr("class", "form-check form-switch");
