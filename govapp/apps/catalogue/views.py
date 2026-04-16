@@ -598,13 +598,11 @@ class LayerSubmissionViewSet(
                                      content_type='application/json', 
                                      status=status.HTTP_404_NOT_FOUND)
             
-        with open(file_path, 'rb') as fh:
-            res = HttpResponse(fh.read(), 
-                                content_type='application/octet-stream', 
-                                status=status.HTTP_200_OK)
-            res['Content-Disposition'] = 'attachment; filename=' + os.path.basename(file_path)
-            res['Filename'] = os.path.basename(file_path)
-            return res
+        filename = os.path.basename(file_path)
+        res = FileResponse(open(file_path, 'rb'), content_type='application/octet-stream')
+        res['Content-Disposition'] = f'attachment; filename="{filename}"'
+        res['Filename'] = filename
+        return res
         
 
 @drf_utils.extend_schema(tags=["Catalogue - Layer Subscriptions"])
