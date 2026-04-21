@@ -474,7 +474,7 @@ class GeoServerQueueExcutor:
         queue_item.save()
     
 def push(publish_entry: "PublishEntry", symbology_only: bool, submitter: UserModel=None) -> bool:
-    if not hasattr(publish_entry, "geoserver_channels"):
+    if not publish_entry.geoserver_channels.exists():
         log.info(f"'{publish_entry}' has no GeoServer Publish Channel")
         return False
 
