@@ -97,8 +97,35 @@ class Absorber:
                     os.makedirs(temp_dir, exist_ok=True)
                     logger.info(f'Directory: [{temp_dir}] has been made for extract the file: [{path_to_file}]')
 
-                    archive.extractall(path=temp_dir)
-                    logger.info(f'The file: [{path_to_file}] has been extracted into the folder: [{temp_dir}]')
+                    try:
+                        archive.extractall(path=temp_dir)
+                        logger.info(f'The file: [{path_to_file}] has been extracted into the folder: [{temp_dir}]')
+                    except OSError as e:
+                        import errno as _errno
+                        extracted_files = os.listdir(temp_dir) if os.path.isdir(temp_dir) else []
+                        logger.warning(
+                            f'OSError during extractall for [{path_to_file}]: '
+                            f'errno={e.errno} ({_errno.errorcode.get(e.errno, "UNKNOWN")}), '
+                            f'strerror="{e.strerror}", '
+                            f'filename="{e.filename}", '
+                            f'extracted_file_count={len(extracted_files)}, '
+                            f'extracted_files={extracted_files}'
+                        )
+                        if e.errno == _errno.EPERM and extracted_files:
+                            # py7zr attempts to restore UID/GID on extracted directories (os.lchown),
+                            # which fails with EPERM in non-root containers. The files themselves
+                            # have been extracted successfully, so we can safely continue.
+                            logger.warning(
+                                f'File attribute restoration failed (EPERM) for [{path_to_file}], '
+                                f'but files were extracted successfully. Continuing.'
+                            )
+                        else:
+                            logger.error(
+                                f'Unrecoverable OSError during extractall for [{path_to_file}]. '
+                                f'extracted_file_count={len(extracted_files)}',
+                                exc_info=True
+                            )
+                            raise
 
                 # If extracted, loop through extracted files
                 for extracted_filepath in os.listdir(temp_dir):
