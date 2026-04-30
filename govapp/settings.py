@@ -336,6 +336,7 @@ GEOSERVER_LAYER_HEALTH_CHECK_TIMES = decouple.config(
     default='08:00,11:00,14:00,16:00',  # Perth time, ~4x/day
     cast=lambda v: [t.strip() for t in v.split(',')]
 )
+# .env example: GEOSERVER_LAYER_HEALTH_CHECK_TIMES=08:00,11:00,14:00,16:00
 GEOSERVER_SYNC_LAYERS_PERIOD_MINS = decouple.config('GEOSERVER_SYNC_LAYERS_PERIOD_MINS', default=1)
 GEOSERVER_SYNC_RULES_PERIOD_MINS = decouple.config('GEOSERVER_SYNC_RULES_PERIOD_MINS', default=2)
 GEOSERVER_SYNC_USERS_PERIOD_MINS = decouple.config('GEOSERVER_SYNC_USERS_PERIOD_MINS', default=2)
