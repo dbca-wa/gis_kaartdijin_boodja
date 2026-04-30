@@ -118,22 +118,49 @@ class CatalogueEntryViewSet(
             uploaded_file = request.FILES.getlist('file')[0]
             newFileName = request.POST.get('newFileName', '')
 
-            logger.info(f'File: [{uploaded_file.name}] is being uploaded...')
+            logger.info(
+                f'File: [{uploaded_file.name}] (size: {uploaded_file.size} bytes) is being uploaded '
+                f'by user: [{request.user}] (id: {request.user.id})...'
+            )
 
             # Check file extensions
             _, file_extension = os.path.splitext(uploaded_file.name)
             if file_extension.lower() not in allowed_extensions:
+                logger.warning(
+                    f'File upload rejected for user: [{request.user}] (id: {request.user.id}). '
+                    f'Invalid file extension: [{file_extension}] for file: [{uploaded_file.name}]. '
+                    f'Allowed extensions: {allowed_extensions}'
+                )
                 return JsonResponse({'error': 'Invalid file type. Only .zip and .7z files are allowed.'}, status=400)
 
             # Save files
             save_path = os.path.join(settings.PENDING_IMPORT_PATH,  newFileName)
-            with open(save_path, 'wb+') as destination:
-                for chunk in uploaded_file.chunks():
-                    destination.write(chunk)
-            logger.info(f"File: [{uploaded_file.name}] has been successfully saved at [{save_path}].")
+            try:
+                with open(save_path, 'wb+') as destination:
+                    for chunk in uploaded_file.chunks():
+                        destination.write(chunk)
+            except OSError as e:
+                logger.error(
+                    f'Failed to save file: [{uploaded_file.name}] to [{save_path}] '
+                    f'for user: [{request.user}] (id: {request.user.id}). '
+                    f'OS error: {e}'
+                )
+                return JsonResponse({'error': 'Failed to save file on server.'}, status=500)
+            except Exception as e:
+                logger.error(
+                    f'Unexpected error saving file: [{uploaded_file.name}] to [{save_path}] '
+                    f'for user: [{request.user}] (id: {request.user.id}). '
+                    f'Error: {e}'
+                )
+                return JsonResponse({'error': 'An unexpected error occurred while saving the file.'}, status=500)
+
+            logger.info(
+                f"File: [{uploaded_file.name}] (size: {uploaded_file.size} bytes) has been successfully saved at "
+                f"[{save_path}] by user: [{request.user}] (id: {request.user.id})."
+            )
             return JsonResponse({'message': 'File(s) uploaded successfully.'})
         else:
-            logger.info(f"No file(s) were uploaded.")
+            logger.info(f"No file(s) were uploaded by user: [{request.user}] (id: {request.user.id}).")
             return JsonResponse({'error': 'No file(s) were uploaded.'}, status=400)
 
     @drf_utils.extend_schema(request=None, responses={status.HTTP_204_NO_CONTENT: None})

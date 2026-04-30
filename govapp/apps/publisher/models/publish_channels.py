@@ -369,32 +369,41 @@ class GeoServerPublishChannel(mixins.RevisionedMixin):
             try:
                 response_data = geoserver_obj.get_layer_details(self.layer_name_with_workspace)  # Return value can be the layer details or None
                 if response_data:
-                    GeoServerLayerHealthcheck.objects.update_or_create(
-                        geoserver_publish_channel=self,
-                        layer_name=self.layer_name_with_workspace,
-                        defaults={
-                            'health_status': GeoServerLayerHealthcheck.HEALTHY,
-                            'error_message': None,
-                            'last_check_time': timezone.now()
-                        }
-                    )
+                    health_status = GeoServerLayerHealthcheck.HEALTHY
+                    error_message = None
                 else:
                     raise Exception('response data is something wrong...')
             except Exception as e:
-                GeoServerLayerHealthcheck.objects.update_or_create(
-                    geoserver_publish_channel=self,
-                    layer_name=self.layer_name_with_workspace,
-                    defaults={
-                        'health_status': GeoServerLayerHealthcheck.UNHEALTHY,
-                        'error_message': str(e),
-                        'last_check_time': timezone.now()
-                    }
-                )
-        except Exception as e:
+                health_status = GeoServerLayerHealthcheck.UNHEALTHY
+                error_message = str(e)
+
+            # Delete stale records that were created with a different layer name
+            # (e.g. before a workspace was configured on this channel)
+            GeoServerLayerHealthcheck.objects.filter(
+                geoserver_publish_channel=self
+            ).exclude(
+                layer_name=self.layer_name_with_workspace
+            ).delete()
+
             GeoServerLayerHealthcheck.objects.update_or_create(
                 geoserver_publish_channel=self,
-                layer_name='all_layers',
                 defaults={
+                    'layer_name': self.layer_name_with_workspace,
+                    'health_status': health_status,
+                    'error_message': error_message,
+                    'last_check_time': timezone.now()
+                }
+            )
+        except Exception as e:
+            GeoServerLayerHealthcheck.objects.filter(
+                geoserver_publish_channel=self
+            ).exclude(
+                layer_name=self.layer_name_with_workspace
+            ).delete()
+            GeoServerLayerHealthcheck.objects.update_or_create(
+                geoserver_publish_channel=self,
+                defaults={
+                    'layer_name': self.layer_name_with_workspace,
                     'health_status': GeoServerLayerHealthcheck.UNHEALTHY,
                     'error_message': str(e),
                     'last_check_time': timezone.now()
