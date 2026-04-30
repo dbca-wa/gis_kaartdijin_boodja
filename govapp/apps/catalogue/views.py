@@ -134,21 +134,36 @@ class CatalogueEntryViewSet(
                 return JsonResponse({'error': 'Invalid file type. Only .zip and .7z files are allowed.'}, status=400)
 
             # Save files
-            save_path = os.path.join(settings.PENDING_IMPORT_PATH,  newFileName)
+            # Use a .tmp suffix during writing instead of a lock file. A lock file approach
+            # risks leaving a stale lock if the process crashes, which would permanently block
+            # the scanner from processing that file. With .tmp, os.rename() is atomic on the
+            # same filesystem, so the final filename only appears once writing is fully complete.
+            # The directory scanner skips .tmp files, so there is no race condition.
+            save_path = os.path.join(settings.PENDING_IMPORT_PATH, newFileName)
+            tmp_path = save_path + '.tmp'
+            size_path = save_path + '.tmp.size'
             try:
-                with open(save_path, "wb") as f:
-                    for chunk in uploaded_file.chunks(chunk_size=8192):
+                # Write total file size to a companion metadata file so that the
+                # pending imports page can display upload progress (uploaded / total).
+                with open(size_path, 'w') as sf:
+                    sf.write(str(uploaded_file.size))
+                with open(tmp_path, "wb") as f:
+                    # Use 1MB chunks to reduce write syscall overhead for large GIS files
+                    # (GeoTIFF/GeoPackage can be several GB; 8KB chunks would cause ~131k iterations per GB)
+                    for chunk in uploaded_file.chunks(chunk_size=1048576):
                         f.write(chunk)
 
-                # with open(save_path, 'wb+') as destination:
-                #     for chunk in uploaded_file.chunks():
-                #         destination.write(chunk)
+                os.rename(tmp_path, save_path)
+                os.remove(size_path)
             except OSError as e:
                 logger.error(
                     f'Failed to save file: [{uploaded_file.name}] to [{save_path}] '
                     f'for user: [{request.user}] (id: {request.user.id}). '
                     f'OS error: {e}'
                 )
+                for path in (tmp_path, size_path):
+                    if os.path.exists(path):
+                        os.remove(path)
                 return JsonResponse({'error': 'Failed to save file on server.'}, status=500)
             except Exception as e:
                 logger.error(
@@ -156,6 +171,9 @@ class CatalogueEntryViewSet(
                     f'for user: [{request.user}] (id: {request.user.id}). '
                     f'Error: {e}'
                 )
+                for path in (tmp_path, size_path):
+                    if os.path.exists(path):
+                        os.remove(path)
                 return JsonResponse({'error': 'An unexpected error occurred while saving the file.'}, status=500)
 
             logger.info(
