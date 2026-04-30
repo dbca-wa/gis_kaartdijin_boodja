@@ -137,7 +137,7 @@ class CatalogueEntryViewSet(
             save_path = os.path.join(settings.PENDING_IMPORT_PATH,  newFileName)
             try:
                 with open(save_path, "wb") as f:
-                    for chunk in request.FILES["file"].chunks(chunk_size=8192):
+                    for chunk in uploaded_file.chunks(chunk_size=8192):
                         f.write(chunk)
 
                 # with open(save_path, 'wb+') as destination:
