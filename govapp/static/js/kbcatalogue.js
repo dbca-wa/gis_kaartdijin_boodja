@@ -413,76 +413,77 @@ var kbcatalogue = {
         progressBarContainer.empty();
     },
 
-    // Function for uploading files
+    // Function for uploading files using chunked upload (10 MB per chunk).
+    // Each file is sliced into chunks and sent sequentially. Multiple files
+    // are uploaded in parallel (one chunk-loop per file).
     uploadFiles: function(files) {
-        var xhrList = []
+        var CHUNK_SIZE = 10 * 1024 * 1024; // 10 MB per chunk
         var csrf_token = $("#csrfmiddlewaretoken").val();
-    
+
         for (var i = 0; i < files.length; i++) {
             var fileName = files[i].name;
-            var newFileName = kbcatalogue.addDateTimeToFilename(fileName)
-    
+            var newFileName = kbcatalogue.addDateTimeToFilename(fileName);
+
             // Generate progressbar per file
             var { progressBar, progressBarContainer, deleteIcon } = kbcatalogue.createProgressBar(fileName, newFileName);
             $("#progressBars").append(progressBarContainer);
-            
-            (function(index, progressBar, progressBarContainer) {
-                var formData = new FormData();
-                formData.append('file', files[index]);
-                formData.append('newFileName', newFileName)
-    
-                // Delete 
-                deleteIcon.on('click', function() {
-                    // Abort uploading
-                    if (xhrList[index] && xhrList[index].readyState !== 4) {
-                        xhrList[index].abort();
-                    }
-                    // Delete uploaded file from the server
-                    else {
-                        var newFileName = $(this).attr("data-newfilename");
-                        kbcatalogue.deleteFile(newFileName)
-                    }
-                    // Delete progressbar
-                    progressBarContainer.fadeOut('slow', function(){
-                        $(this).remove();
-                    })
-                });
-    
-                // Upload
-                var xhr = $.ajax({
-                    url: kbcatalogue.var.catalogue_data_url + "upload_file/",
-                    type: 'POST',
-                    headers: {'X-CSRFToken' : csrf_token},
-                    data: formData,
-                    cache: false,
-                    contentType: false,
-                    processData: false,
-                    xhr: function() {
-                        var xhr = new window.XMLHttpRequest();
-                        xhr.upload.addEventListener("progress", function(evt) {
-                            if (evt.lengthComputable) {
-                                var percentComplete = (evt.loaded / evt.total) * 100;
-                                // Update progressbar
-                                progressBar.find(".progress-bar").width(percentComplete + '%');
-                                progressBar.find(".progress-bar").attr('aria-valuenow', percentComplete);
-                                // Display percentage text
-                                progressBarContainer.find(".progress-text").text(percentComplete.toFixed(0) + '%');
-                            }
-                        }, false);
-                        return xhr;
-                    },
-                    success: function(response){
 
-                    },
-                    error: function(xhr, status, error){
-                        var errorResponse = JSON.parse(xhr.responseText);
-                        progressBar.fadeOut('slow', function(){
-                            progressBar.replaceWith($('<span class="error-message">' + errorResponse.error + '</span>'))
-                        });
-                    }
+            (function(file, newFileName, progressBar, progressBarContainer, deleteIcon) {
+                var cancelled = false;
+                var totalChunks = Math.max(1, Math.ceil(file.size / CHUNK_SIZE));
+
+                // Cancel / delete button
+                deleteIcon.on('click', function() {
+                    cancelled = true;
+                    kbcatalogue.deleteFile(newFileName);
+                    progressBarContainer.fadeOut('slow', function() { $(this).remove(); });
                 });
-                xhrList.push(xhr);
-            })(i, progressBar, progressBarContainer);
+
+                function uploadChunk(chunkIndex) {
+                    if (cancelled) return;
+
+                    var start = chunkIndex * CHUNK_SIZE;
+                    var end = Math.min(start + CHUNK_SIZE, file.size);
+                    var chunkBlob = file.slice(start, end);
+
+                    var formData = new FormData();
+                    formData.append('chunk', chunkBlob, file.name);
+                    formData.append('newFileName', newFileName);
+                    formData.append('chunkIndex', chunkIndex);
+                    formData.append('totalChunks', totalChunks);
+                    formData.append('totalSize', file.size);
+
+                    $.ajax({
+                        url: kbcatalogue.var.catalogue_data_url + "upload_file/",
+                        type: 'POST',
+                        headers: {'X-CSRFToken': csrf_token},
+                        data: formData,
+                        cache: false,
+                        contentType: false,
+                        processData: false,
+                        success: function(response) {
+                            if (cancelled) return;
+                            var percent = ((chunkIndex + 1) / totalChunks) * 100;
+                            progressBar.find(".progress-bar").width(percent + '%');
+                            progressBar.find(".progress-bar").attr('aria-valuenow', percent);
+                            progressBarContainer.find(".progress-text").text(percent.toFixed(0) + '%');
+                            if (!response.complete) {
+                                uploadChunk(chunkIndex + 1);
+                            }
+                        },
+                        error: function(xhr) {
+                            if (cancelled) return;
+                            var errorResponse;
+                            try { errorResponse = JSON.parse(xhr.responseText); } catch(e) { errorResponse = {error: 'Upload failed.'}; }
+                            progressBar.fadeOut('slow', function() {
+                                progressBar.replaceWith($('<span class="error-message">' + errorResponse.error + '</span>'));
+                            });
+                        }
+                    });
+                }
+
+                uploadChunk(0);
+            })(files[i], newFileName, progressBar, progressBarContainer, deleteIcon);
         }
     },
 
