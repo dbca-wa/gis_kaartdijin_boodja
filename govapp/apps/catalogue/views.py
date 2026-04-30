@@ -136,9 +136,13 @@ class CatalogueEntryViewSet(
             # Save files
             save_path = os.path.join(settings.PENDING_IMPORT_PATH,  newFileName)
             try:
-                with open(save_path, 'wb+') as destination:
-                    for chunk in uploaded_file.chunks():
-                        destination.write(chunk)
+                with open(save_path, "wb") as f:
+                    for chunk in request.FILES["file"].chunks(chunk_size=8192):
+                        f.write(chunk)
+
+                # with open(save_path, 'wb+') as destination:
+                #     for chunk in uploaded_file.chunks():
+                #         destination.write(chunk)
             except OSError as e:
                 logger.error(
                     f'Failed to save file: [{uploaded_file.name}] to [{save_path}] '
