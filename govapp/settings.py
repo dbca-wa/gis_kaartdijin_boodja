@@ -331,11 +331,18 @@ POSTGRES_SCANNER_PERIOD_MINS = decouple.config('POSTGRES_SCANNER_PERIOD_MINS', d
 SHAREPOINT_SCANNER_PERIOD_MINS = decouple.config('SHAREPOINT_SCANNER_PERIOD_MINS', default=2)
 DIRECTORY_SCANNER_PERIOD_MINS = decouple.config('DIRECTORY_SCANNER_PERIOD_MINS', default=2)
 PUBLISH_GEOSERVER_QUEUE_PERIOD_MINS = decouple.config('PUBLISH_GEOSERVER_QUEUE_PERIOD_MINS', default=2)
-GEOSERVER_LAYER_HEALTH_CHECK_PERIOD_MINS = decouple.config('GEOSERVER_LAYER_HEALTH_CHECK_PERIOD_MINS', default=2)
+GEOSERVER_LAYER_HEALTH_CHECK_TIMES = decouple.config(
+    'GEOSERVER_LAYER_HEALTH_CHECK_TIMES',
+    default='08:00,11:00,14:00,16:00',  # Perth time, ~4x/day
+    cast=lambda v: [t.strip() for t in v.split(',')]
+)
 GEOSERVER_SYNC_LAYERS_PERIOD_MINS = decouple.config('GEOSERVER_SYNC_LAYERS_PERIOD_MINS', default=1)
 GEOSERVER_SYNC_RULES_PERIOD_MINS = decouple.config('GEOSERVER_SYNC_RULES_PERIOD_MINS', default=2)
 GEOSERVER_SYNC_USERS_PERIOD_MINS = decouple.config('GEOSERVER_SYNC_USERS_PERIOD_MINS', default=2)
 SYNC_ITASSETS_USERS_PERIOD_MINS = decouple.config('SYNC_ITASSETS_USERS_PERIOD_MINS', default=2)
+# Lock timeout for django-cron. Default is 1440 mins (24h), which causes jobs to be skipped
+# for 24h if a Pod restart kills a running job mid-execution. 10 mins is enough for any cron here.
+DJANGO_CRON_LOCK_TIME = decouple.config('DJANGO_CRON_LOCK_TIME', default=10, cast=int)
 CRON_CLASSES = [
     "govapp.apps.catalogue.cron.PostgresScannerCronJob",
     "govapp.apps.catalogue.cron.SharepointScannerCronJob",
