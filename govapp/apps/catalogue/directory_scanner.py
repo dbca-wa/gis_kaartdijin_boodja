@@ -43,6 +43,11 @@ class Scanner:
 
         # Loop through files
         for file in files_array:
+            # Skip files that are still being uploaded (written with .tmp suffix)
+            if file.endswith('.tmp'):
+                log.info(f"Skipping '{file}' as it is still being uploaded")
+                continue
+
             # Log
             log.info(f"Discovered file '{file}'")
 

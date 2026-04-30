@@ -99,73 +99,102 @@ class CatalogueEntryViewSet(
     def delete_file(self, request: request.Request):
         filenameToDelete = request.POST.get('newFileName', '')
         if filenameToDelete:
-            pathToFile = os.path.join(settings.PENDING_IMPORT_PATH,  filenameToDelete)
-            if os.path.exists(pathToFile):
-                os.remove(pathToFile)
-                logger.info(f"File: [{pathToFile}] deleted successfully.")
+            base_path = os.path.join(settings.PENDING_IMPORT_PATH, filenameToDelete)
+            # Remove final file, in-progress .tmp, and companion .tmp.size if they exist
+            deleted_any = False
+            for path in (base_path, base_path + '.tmp', base_path + '.tmp.size'):
+                if os.path.exists(path):
+                    os.remove(path)
+                    logger.info(f"File: [{path}] deleted successfully.")
+                    deleted_any = True
+            if deleted_any:
                 return JsonResponse({'message': 'File deleted successfully.'})
             else:
-                logger.info(f"File: [{pathToFile}] doesn't exist.")
+                logger.info(f"File: [{base_path}] doesn't exist.")
                 return JsonResponse({'message': 'File does not exist.'})
         else:
             return JsonResponse({'message': 'No file specified.'})
 
     @decorators.action(detail=False, methods=["POST"], permission_classes=[accounts_permissions.IsInCatalogueAdminGroup])
     def upload_file(self, request: request.Request):
-        if request.FILES:
-            # uploaded_files = []  # Multiple files might be uploaded
+        chunk = request.FILES.get('chunk')
+        if not chunk:
+            return JsonResponse({'error': 'No chunk provided.'}, status=400)
+
+        new_file_name = request.POST.get('newFileName', '')
+        if not new_file_name:
+            return JsonResponse({'error': 'No file name provided.'}, status=400)
+
+        try:
+            chunk_index = int(request.POST.get('chunkIndex', 0))
+            total_chunks = int(request.POST.get('totalChunks', 1))
+            total_size = int(request.POST.get('totalSize', 0))
+        except (ValueError, TypeError):
+            return JsonResponse({'error': 'Invalid chunk parameters.'}, status=400)
+
+        # Validate file extension on the first chunk only
+        if chunk_index == 0:
             allowed_extensions = settings.ALLOWED_EXTENSIONS_TO_UPLOAD
-            uploaded_file = request.FILES.getlist('file')[0]
-            newFileName = request.POST.get('newFileName', '')
-
-            logger.info(
-                f'File: [{uploaded_file.name}] (size: {uploaded_file.size} bytes) is being uploaded '
-                f'by user: [{request.user}] (id: {request.user.id})...'
-            )
-
-            # Check file extensions
-            _, file_extension = os.path.splitext(uploaded_file.name)
+            _, file_extension = os.path.splitext(new_file_name)
             if file_extension.lower() not in allowed_extensions:
                 logger.warning(
                     f'File upload rejected for user: [{request.user}] (id: {request.user.id}). '
-                    f'Invalid file extension: [{file_extension}] for file: [{uploaded_file.name}]. '
+                    f'Invalid file extension: [{file_extension}] for file: [{new_file_name}]. '
                     f'Allowed extensions: {allowed_extensions}'
                 )
                 return JsonResponse({'error': 'Invalid file type. Only .zip and .7z files are allowed.'}, status=400)
 
-            # Save files
-            save_path = os.path.join(settings.PENDING_IMPORT_PATH,  newFileName)
-            try:
-                with open(save_path, "wb") as f:
-                    for chunk in request.FILES["file"].chunks(chunk_size=8192):
-                        f.write(chunk)
+        save_path = os.path.join(settings.PENDING_IMPORT_PATH, new_file_name)
+        tmp_path = save_path + '.tmp'
+        size_path = save_path + '.tmp.size'
 
-                # with open(save_path, 'wb+') as destination:
-                #     for chunk in uploaded_file.chunks():
-                #         destination.write(chunk)
-            except OSError as e:
-                logger.error(
-                    f'Failed to save file: [{uploaded_file.name}] to [{save_path}] '
-                    f'for user: [{request.user}] (id: {request.user.id}). '
-                    f'OS error: {e}'
+        try:
+            if chunk_index == 0:
+                logger.info(
+                    f'Chunk upload started: [{new_file_name}] total_size={total_size} bytes '
+                    f'total_chunks={total_chunks} by user: [{request.user}] (id: {request.user.id})'
                 )
-                return JsonResponse({'error': 'Failed to save file on server.'}, status=500)
-            except Exception as e:
-                logger.error(
-                    f'Unexpected error saving file: [{uploaded_file.name}] to [{save_path}] '
-                    f'for user: [{request.user}] (id: {request.user.id}). '
-                    f'Error: {e}'
-                )
-                return JsonResponse({'error': 'An unexpected error occurred while saving the file.'}, status=500)
+                # Write total size metadata and start a new .tmp file
+                with open(size_path, 'w') as sf:
+                    sf.write(str(total_size))
+                open_mode = 'wb'
+            else:
+                open_mode = 'ab'
 
-            logger.info(
-                f"File: [{uploaded_file.name}] (size: {uploaded_file.size} bytes) has been successfully saved at "
-                f"[{save_path}] by user: [{request.user}] (id: {request.user.id})."
+            with open(tmp_path, open_mode) as f:
+                for data in chunk.chunks(chunk_size=1048576):
+                    f.write(data)
+
+            if chunk_index == total_chunks - 1:
+                # All chunks received — atomically rename to final filename
+                os.rename(tmp_path, save_path)
+                os.remove(size_path)
+                logger.info(
+                    f'Chunk upload complete: [{new_file_name}] ({total_chunks} chunks) '
+                    f'by user: [{request.user}] (id: {request.user.id})'
+                )
+                return JsonResponse({'complete': True})
+
+            return JsonResponse({'received': chunk_index})
+
+        except OSError as e:
+            logger.error(
+                f'Failed to write chunk {chunk_index} of [{new_file_name}] '
+                f'for user: [{request.user}] (id: {request.user.id}). OS error: {e}'
             )
-            return JsonResponse({'message': 'File(s) uploaded successfully.'})
-        else:
-            logger.info(f"No file(s) were uploaded by user: [{request.user}] (id: {request.user.id}).")
-            return JsonResponse({'error': 'No file(s) were uploaded.'}, status=400)
+            for path in (tmp_path, size_path):
+                if os.path.exists(path):
+                    os.remove(path)
+            return JsonResponse({'error': 'Failed to save chunk on server.'}, status=500)
+        except Exception as e:
+            logger.error(
+                f'Unexpected error writing chunk {chunk_index} of [{new_file_name}] '
+                f'for user: [{request.user}] (id: {request.user.id}). Error: {e}'
+            )
+            for path in (tmp_path, size_path):
+                if os.path.exists(path):
+                    os.remove(path)
+            return JsonResponse({'error': 'An unexpected error occurred while saving the chunk.'}, status=500)
 
     @drf_utils.extend_schema(request=None, responses={status.HTTP_204_NO_CONTENT: None})
     @decorators.action(detail=True, methods=["POST"])

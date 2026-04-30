@@ -95,15 +95,53 @@ class OldCatalogueVue(base.TemplateView):
         return shortcuts.render(request, self.template_name, context)
 
 
+def _get_pending_imports_file_list() -> list:
+    """Return a list of dicts describing files in the pending imports folder."""
+    import re
+    pathToFolder = settings.PENDING_IMPORT_PATH
+    raw_files = os.listdir(pathToFolder)
+    timestamp_re = re.compile(r'^(.+)\.(\d{8})_(\d{6})(\.[^.]+)$')
+    file_list = []
+    for raw_name in sorted(raw_files):
+        if raw_name.endswith('.tmp.size'):
+            continue
+        is_uploading = raw_name.endswith('.tmp')
+        name = raw_name[:-4] if is_uploading else raw_name
+        m = timestamp_re.match(name)
+        if m:
+            base, date_part, time_part, ext = m.groups()
+            original_name = base + ext
+            timestamp = f"{date_part[6:8]}/{date_part[4:6]}/{date_part[:4]} {time_part[:2]}:{time_part[2:4]}:{time_part[4:6]}"
+        else:
+            original_name = name
+            timestamp = ''
+        current_size = os.path.getsize(os.path.join(pathToFolder, raw_name))
+        total_size = None
+        if is_uploading:
+            size_file = os.path.join(pathToFolder, raw_name + '.size')
+            if os.path.exists(size_file):
+                try:
+                    with open(size_file) as sf:
+                        total_size = int(sf.read().strip())
+                except (ValueError, OSError):
+                    pass
+        file_list.append({
+            'raw_name': raw_name,
+            'original_name': original_name,
+            'timestamp': timestamp,
+            'is_uploading': is_uploading,
+            'file_size': current_size,
+            'total_size': total_size,
+        })
+    return file_list
+
+
 class PendingImportsView(base.TemplateView):
     template_name = "govapp/pending_imports.html"
 
     @method_decorator(utils.check_option_menus_permission)
     def get(self, request: http.HttpRequest, *args: Any, **kwargs: Any) -> http.HttpResponse:
-        pathToFolder = settings.PENDING_IMPORT_PATH
-        file_list = os.listdir(pathToFolder)
-
-        context = {'file_list': file_list}
+        context = {'file_list': _get_pending_imports_file_list()}
         return shortcuts.render(request, self.template_name, context)
 
 
