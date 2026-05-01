@@ -3,6 +3,7 @@
 
 # Third-Party
 from django.db import models
+from django.utils import timezone as django_timezone
 import reversion
 import logging
 import requests
@@ -129,8 +130,9 @@ class LayerSubmission(mixins.RevisionedMixin):
         Returns:
             str: Formatted datetime string of the submitted_at 
         """
-        # Retrieve String and Return
-        return self.submitted_at.strftime(format)
+        # Retrieve String and Return (convert UTC → Perth local time before formatting)
+        local_dt = django_timezone.localtime(self.submitted_at)
+        return local_dt.strftime(format)
 
     def is_declined(self) -> bool:
         """Determines whether the Layer Submission is declined.

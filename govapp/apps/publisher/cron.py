@@ -29,7 +29,7 @@ class PublishGeoServerQueueCronJob(django_cron.CronJobBase):
 
 
 class GeoServerLayerHealthcheckCronJob(django_cron.CronJobBase):
-    schedule = django_cron.Schedule(run_every_mins=conf.settings.GEOSERVER_LAYER_HEALTH_CHECK_PERIOD_MINS)
+    schedule = django_cron.Schedule(run_at_times=conf.settings.GEOSERVER_LAYER_HEALTH_CHECK_TIMES)
     code = 'geoserver.publisher.geoserver_layer_health_check_cron_job'
 
     def do(self):

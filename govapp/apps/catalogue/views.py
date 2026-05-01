@@ -166,9 +166,15 @@ class CatalogueEntryViewSet(
                     f.write(data)
 
             if chunk_index == total_chunks - 1:
-                # All chunks received — atomically rename to final filename
+                # All chunks received — atomically rename to final filename.
+                # The rename is the critical operation; size_path removal is cleanup only.
                 os.rename(tmp_path, save_path)
-                os.remove(size_path)
+                try:
+                    os.remove(size_path)
+                except OSError as cleanup_error:
+                    logger.warning(
+                        f'Could not remove size metadata file [{size_path}]: {cleanup_error}'
+                    )
                 logger.info(
                     f'Chunk upload complete: [{new_file_name}] ({total_chunks} chunks) '
                     f'by user: [{request.user}] (id: {request.user.id})'

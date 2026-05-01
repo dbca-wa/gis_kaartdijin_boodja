@@ -475,6 +475,7 @@ var kbcatalogue = {
                             if (cancelled) return;
                             var errorResponse;
                             try { errorResponse = JSON.parse(xhr.responseText); } catch(e) { errorResponse = {error: 'Upload failed.'}; }
+                            progressBarContainer.find('.progress-text').text('');
                             progressBar.fadeOut('slow', function() {
                                 progressBar.replaceWith($('<span class="error-message">' + errorResponse.error + '</span>'));
                             });
