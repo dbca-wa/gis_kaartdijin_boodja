@@ -27,10 +27,6 @@ RUN apt-get install --no-install-recommends -y python3-pil
 RUN apt-get install --no-install-recommends -y postgis 
 # ADDED END from bottom
 
-RUN add-apt-repository ppa:deadsnakes/ppa -y
-RUN apt update
-RUN apt-get install --no-install-recommends -y  python3.10
-
 # Install GDAL
 RUN add-apt-repository ppa:ubuntugis/ubuntugis-unstable
 RUN apt update
