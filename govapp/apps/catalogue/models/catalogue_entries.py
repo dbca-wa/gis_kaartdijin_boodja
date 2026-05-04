@@ -100,12 +100,6 @@ CATALOGUE_ENTRY_TYPES_REQUIRE_ACTIVE_LAYER = [
 ]
 
 
-class CatalogueEntryCRSType(models.TextChoices):
-    """Enumeration for supported CRS standards."""
-    GDA94 = "EPSG:4283", "GDA94 (EPSG:4283)"
-    GDA2020 = "EPSG:7844", "GDA2020 (EPSG:7844)"
-
-
 @reversion.register(
     follow=(
         "attributes",
@@ -154,7 +148,6 @@ class CatalogueEntry(mixins.RevisionedMixin):
     force_run_postgres_scanner = models.BooleanField(default=False)
     default_crs = models.CharField(
         max_length=64,
-        choices=CatalogueEntryCRSType.choices,
         null=True,
         blank=True,
         help_text="Expected CRS for uploaded spatial files. If set, uploads with a different CRS will be declined.",
