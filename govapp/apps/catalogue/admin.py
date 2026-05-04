@@ -276,3 +276,13 @@ admin.site.register(models.layer_symbology.LayerSymbology, LayerSymbologyAdmin)
 admin.site.register(models.notifications.EmailNotification, EmailNotificationAdmin)
 admin.site.register(models.notifications.WebhookNotification, WebhookNotificationAdmin)
 admin.site.register(models.permission.CatalogueEntryPermission, CatalogueEntryPermissionAdmin)
+
+
+class AllowedCRSAdmin(admin.ModelAdmin):
+    """Django Admin for AllowedCRS."""
+    list_display = ('id', 'epsg_code', 'label')
+    search_fields = ('epsg_code', 'label')
+    ordering = ('epsg_code',)
+
+
+admin.site.register(models.allowed_crs.AllowedCRS, AllowedCRSAdmin)
