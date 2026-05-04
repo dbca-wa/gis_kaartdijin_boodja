@@ -24,6 +24,7 @@ from rest_framework import status
 # Internal
 from govapp import settings
 from govapp.apps.catalogue.models import catalogue_entries as catalogue_entries_models
+from govapp.apps.catalogue.models.allowed_crs import AllowedCRS
 from govapp.apps.catalogue.models.layer_symbology import LayerSymbology
 from govapp.apps.catalogue.models.permission import CatalogueEntryAccessPermission
 from govapp.apps.publisher.models import publish_entries as publish_entries_models
@@ -482,7 +483,7 @@ class CatalogueEntriesView(base.TemplateView):
         context['CatalogueEntryType'] = catalogue_entries_models.CatalogueEntryType  # SPATIAL_FILE, SUBSCRIPTION_WFS, ...
         context['CatalogueEntryPermissionType'] = catalogue_entries_models.CatalogueEntryPermissionType  # NOT_RESTRICTED, RESTRICTED
         context['CatalogueEntryStatus'] = catalogue_entries_models.CatalogueEntryStatus  # NEW_DRAFT, LOCKED, ...
-        context['CatalogueEntryCRSType'] = catalogue_entries_models.CatalogueEntryCRSType  # GDA94, GDA2020
+        context['allowed_crs_list'] = AllowedCRS.objects.all()
 
         # Render Template and Return
         return shortcuts.render(request, self.template_name, context)

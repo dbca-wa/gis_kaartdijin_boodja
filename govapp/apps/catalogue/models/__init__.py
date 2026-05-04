@@ -1,5 +1,6 @@
 """Kaartdijin Boodja Catalogue Django Application Models."""
 
+from . import allowed_crs
 from . import catalogue_entries
 from . import custodians
 from . import layer_attributes
