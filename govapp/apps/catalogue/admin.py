@@ -280,9 +280,10 @@ admin.site.register(models.permission.CatalogueEntryPermission, CatalogueEntryPe
 
 class AllowedCRSAdmin(admin.ModelAdmin):
     """Django Admin for AllowedCRS."""
-    list_display = ('id', 'epsg_code', 'label')
+    list_display = ('id', 'epsg_code', 'label', 'created_at', 'updated_at')
     search_fields = ('epsg_code', 'label')
     ordering = ('epsg_code',)
+    readonly_fields = ('created_at', 'updated_at')
 
 
 admin.site.register(models.allowed_crs.AllowedCRS, AllowedCRSAdmin)

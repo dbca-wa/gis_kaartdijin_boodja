@@ -1,9 +1,11 @@
 """Kaartdijin Boodja Catalogue Django Application Allowed CRS Models."""
 
 # Third-Party
+import reversion
 from django.db import models
 
 
+@reversion.register()
 class AllowedCRS(models.Model):
     """Model representing a CRS code that is permitted for spatial file uploads."""
 
@@ -16,6 +18,8 @@ class AllowedCRS(models.Model):
         max_length=256,
         help_text="Human-readable name, e.g. 'GDA2020'.",
     )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
 
     class Meta:
         verbose_name = "Allowed CRS"
