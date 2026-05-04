@@ -7,6 +7,7 @@ from rest_framework import serializers
 
 # Local
 from govapp.apps.catalogue import models
+from govapp.apps.catalogue.models.allowed_crs import AllowedCRS
 
 
 class CatalogueEntrySerializer(serializers.ModelSerializer):
@@ -18,6 +19,12 @@ class CatalogueEntrySerializer(serializers.ModelSerializer):
     assigned_to_email = serializers.ReadOnlyField(source='assigned_to.email',)
     updated_at = serializers.SerializerMethodField()
     permission_type_str = serializers.SerializerMethodField()
+    default_crs = serializers.SlugRelatedField(
+        slug_field='epsg_code',
+        queryset=AllowedCRS.objects.all(),
+        allow_null=True,
+        required=False,
+    )
 
     class Meta:
         """Catalogue Entry Model Serializer Metadata."""
