@@ -417,10 +417,10 @@ class Absorber:
 
         # CRS validation: if the catalogue has a configured default_crs and the file's
         # CRS is known but does not match, decline the submission immediately.
-        if catalogue_entry.default_crs and crs and catalogue_entry.default_crs != crs:
+        if catalogue_entry.default_crs and crs and catalogue_entry.default_crs.epsg_code != crs:
             logger.warning(
                 f"CRS mismatch for CatalogueEntry [{catalogue_entry}]: "
-                f"expected '{catalogue_entry.default_crs}', got '{crs}'. Declining submission."
+                f"expected '{catalogue_entry.default_crs.epsg_code}', got '{crs}'. Declining submission."
             )
             layer_submission.decline()
             directory_notifications.catalogue_entry_update_failure(catalogue_entry)
