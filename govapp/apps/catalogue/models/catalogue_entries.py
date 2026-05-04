@@ -146,10 +146,12 @@ class CatalogueEntry(mixins.RevisionedMixin):
     )
     permission_type = models.IntegerField(choices=CatalogueEntryPermissionType.choices, default=CatalogueEntryPermissionType.NOT_RESTRICTED)
     force_run_postgres_scanner = models.BooleanField(default=False)
-    default_crs = models.CharField(
-        max_length=64,
+    default_crs = models.ForeignKey(
+        "allowed_crs.AllowedCRS",
         null=True,
         blank=True,
+        on_delete=models.SET_NULL,
+        related_name="catalogue_entries",
         help_text="Expected CRS for uploaded spatial files. If set, uploads with a different CRS will be declined.",
     )
     # objects = CatalogueEntryManager()
