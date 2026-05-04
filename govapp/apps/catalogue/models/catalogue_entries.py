@@ -147,7 +147,7 @@ class CatalogueEntry(mixins.RevisionedMixin):
     permission_type = models.IntegerField(choices=CatalogueEntryPermissionType.choices, default=CatalogueEntryPermissionType.NOT_RESTRICTED)
     force_run_postgres_scanner = models.BooleanField(default=False)
     default_crs = models.ForeignKey(
-        "allowed_crs.AllowedCRS",
+        "catalogue.AllowedCRS",
         null=True,
         blank=True,
         on_delete=models.SET_NULL,
