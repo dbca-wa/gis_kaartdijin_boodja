@@ -118,7 +118,7 @@
                               <select class="form-control" id="catalogue-default-crs">
                                     <option value="">-- No CRS check --</option>
                                     {% for crs in allowed_crs_list %}
-                                          {% if catalogue_entry_obj.default_crs == crs.epsg_code %}
+                                          {% if catalogue_entry_obj.default_crs == crs %}
                                                 <option value="{{ crs.epsg_code }}" selected>{{ crs }}</option>
                                           {% else %}
                                                 <option value="{{ crs.epsg_code }}">{{ crs }}</option>
