@@ -53,6 +53,25 @@ class Absorber:
         filepath = pathlib.Path(filepath)
         logger.info(f"Retrieved [{path}] to [{filepath}]")
 
+        # Immediately rename the file to <name>.absorbing within pending_imports/.
+        # Both the source and destination share the same filesystem mount point, so
+        # this rename is a fast metadata operation regardless of file size.  The scanner
+        # skips .absorbing files, which prevents duplicate processing while the
+        # subsequent copy to data_storage/ is in progress (can take minutes for large files).
+        original_stem = filepath.stem
+        original_suffix = filepath.suffix
+        absorbing_path = filepath.parent / (filepath.name + ".absorbing")
+        try:
+            filepath.rename(absorbing_path)
+            filepath = absorbing_path
+            logger.info(f"Marked as in-progress: [{filepath}]")
+        except OSError as e:
+            logger.error(
+                f"Could not rename [{filepath}] to [{absorbing_path}] — "
+                f"another cron job may have already claimed it. Skipping. ({e})"
+            )
+            return
+
         # Move the file on the remote storage into the archive area
         # The file is renamed to include a UTC timestamp, to avoid collisions
         import pytz
@@ -63,7 +82,8 @@ class Absorber:
             os.makedirs(storage_directory)
             logger.info(f"Directory created: [{storage_directory}]")
 
-        storage_path = os.path.join(storage_directory, filepath.stem + "." + timestamp_str + filepath.suffix)
+        # Use original stem/suffix (not .absorbing) so the archived filename is correct.
+        storage_path = os.path.join(storage_directory, original_stem + "." + timestamp_str + original_suffix)
         archive = self.storage.move_to_storage(filepath, storage_path)  # Move file to archive
 
         # # Log

@@ -341,9 +341,10 @@ GEOSERVER_SYNC_LAYERS_PERIOD_MINS = decouple.config('GEOSERVER_SYNC_LAYERS_PERIO
 GEOSERVER_SYNC_RULES_PERIOD_MINS = decouple.config('GEOSERVER_SYNC_RULES_PERIOD_MINS', default=2)
 GEOSERVER_SYNC_USERS_PERIOD_MINS = decouple.config('GEOSERVER_SYNC_USERS_PERIOD_MINS', default=2)
 SYNC_ITASSETS_USERS_PERIOD_MINS = decouple.config('SYNC_ITASSETS_USERS_PERIOD_MINS', default=2)
-# Lock timeout for django-cron. Default is 1440 mins (24h), which causes jobs to be skipped
-# for 24h if a Pod restart kills a running job mid-execution. 10 mins is enough for any cron here.
-DJANGO_CRON_LOCK_TIME = decouple.config('DJANGO_CRON_LOCK_TIME', default=10, cast=int)
+# Lock timeout for django-cron in seconds. The CacheLock backend uses this value as a cache key
+# TTL (seconds), not minutes. Set to 86400s (24h) so that if a Pod restart kills a running job
+# mid-execution, the stale lock expires within 24h and the job can run again automatically.
+DJANGO_CRON_LOCK_TIME = decouple.config('DJANGO_CRON_LOCK_TIME', default=86400, cast=int)
 CRON_CLASSES = [
     "govapp.apps.catalogue.cron.PostgresScannerCronJob",
     "govapp.apps.catalogue.cron.SharepointScannerCronJob",

@@ -70,14 +70,34 @@ var table={
                     row.append(this._make_text_cell(obj[key]));
                 else if(columns[i][key] == 'boolean')
                     row.append(this._make_boolean_cell(obj[key]));
+                else if(columns[i][key] == 'datetime')
+                    row.append(this._make_datetime_cell(obj[key]));
                 else if(typeof columns[i][key] === 'object' && columns[i][key].type == 'link')
                     row.append(this._make_link_cell(obj[key], columns[i][key].url(obj)));
+                else if(typeof columns[i][key] === 'object' && columns[i][key].type == 'badge')
+                    row.append(this._make_badge_cell(obj[key], columns[i][key].classes(obj[key])));
             }
         }
         return row;
     },
+    _make_datetime_cell: function(value){
+        if (!value) return $('<td>').text('');
+        const d = new Date(value);
+        const pad = (n) => String(n).padStart(2, '0');
+        const datePart = `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`;
+        const timePart = `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+        const td = $('<td>').attr('style', 'white-space: nowrap;');
+        td.append($('<span>').text(datePart));
+        td.append($('<br>'));
+        td.append($('<span>').text(timePart));
+        return td;
+    },
     _make_text_cell: function(text){
         return $('<td>').text(text);
+    },
+    _make_badge_cell: function(text, classes){
+        let span = $('<span>').attr('class', 'badge ' + classes).text(text);
+        return $('<td>').append(span);
     },
     _make_link_cell: function(text, url){
         let a = $('<a>').attr('href', url).attr('style', 'text-decoration: none;').text(text);

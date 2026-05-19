@@ -28,8 +28,8 @@ class GeoServerQueueStatus(models.IntegerChoices):
     CONVERTED = 4, "Awaiting Transfer"
     UPLOAD_IN_PROGRESS = 5, "Transferring"
     UPLOAD_FAILED = 6, "Transfer Failed"
-    READY_TO_PUBLISH = 7, "Awaiting Publication"
-    PUBLISH_FAILED = 8, "Publication Failed"
+    READY_TO_PUBLISH = 7, "Awaiting Publishing"
+    PUBLISH_FAILED = 8, "Publishing Failed"
 
 
 class GeoServerQueueType(models.IntegerChoices):

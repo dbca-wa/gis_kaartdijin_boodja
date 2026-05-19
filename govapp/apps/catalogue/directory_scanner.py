@@ -45,8 +45,11 @@ class Scanner:
         for file in files_array:
             # Skip files that are still being uploaded (written with .tmp suffix)
             # Also skip the companion .tmp.size metadata files created during chunked upload
-            if file.endswith('.tmp') or file.endswith('.tmp.size'):
-                log.info(f"Skipping '{file}' as it is still being uploaded")
+            # Skip files currently being archived by another absorb() call: absorb() renames
+            # the file to <name>.absorbing before starting the (potentially slow) copy to
+            # data_storage/, preventing duplicate processing of large files.
+            if file.endswith('.tmp') or file.endswith('.tmp.size') or file.endswith('.absorbing'):
+                log.info(f"Skipping '{file}' as it is still being uploaded or processed")
                 continue
 
             # Log

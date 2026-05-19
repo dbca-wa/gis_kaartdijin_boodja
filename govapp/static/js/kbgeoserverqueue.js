@@ -35,11 +35,6 @@ var kbgeoserverweb = {
                     'PURGE_CACHE': 'Purge Cache',
                 };
                 for(let i in response.results){
-                    const failed_statuses = ['Conversion Failed', 'Publication Failed', 'Transfer Failed', 'FAILED'];
-                    const success_statuses = ['Published', 'PURGED'];
-                    if(failed_statuses.includes(response.results[i].status)) response.results[i].success = false;
-                    else if(success_statuses.includes(response.results[i].status)) response.results[i].success = true;
-                    else response.results[i].success = null;
                     response.results[i].queue_type_label = queue_type_label[response.results[i].queue_type] || response.results[i].queue_type;
                 }
 
@@ -49,11 +44,25 @@ var kbgeoserverweb = {
                     {queue_type_label:'text'},
                     {name: {type: 'link', url: (row) => `/publish/${row.publish_entry}/`}},
                     {submitter:'text'}, 
-                    {status:'text'}, 
-                    {success:'boolean'}, 
-                    {started_at:'text'}, 
+                    {status: {type: 'badge', classes: (status) => {
+                        const map = {
+                            'Queued':               'bg-primary',
+                            'Converting':           'bg-warning text-dark',
+                            'Published':            'bg-success',
+                            'Conversion Failed':    'bg-danger',
+                            'Awaiting Transfer':    'bg-info text-dark',
+                            'Transferring':         'bg-warning text-dark',
+                            'Transfer Failed':      'bg-danger',
+                            'Awaiting Publishing': 'bg-info text-dark',
+                            'Publishing Failed':   'bg-danger',
+                            'PURGED':               'bg-secondary',
+                            'FAILED':               'bg-danger',
+                        };
+                        return map[status] || 'bg-secondary';
+                    }}},
+                    {started_at:'datetime'}, 
                     {publishing_result:'text'}, 
-                    {created_at:'text'}
+                    {created_at:'datetime'}
                 ]);
                 if(response.results == 0){
                     table.message_tbody(tbody, "No results found");
