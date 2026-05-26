@@ -3,8 +3,10 @@
 # Standard
 import logging
 import pathlib
+import shutil
 
 # Third-Party
+import decouple
 import requests
 from requests.auth import HTTPBasicAuth
 from django.conf import settings
@@ -327,6 +329,14 @@ class GeoServerQueueExcutor:
                         f"Failed to save error state for queue item pk={queue_item.pk}: {save_error}",
                         exc_info=True
                     )
+            finally:
+                try:
+                    self._cleanup_converted_file(queue_item)
+                except Exception as cleanup_err:
+                    log.error(
+                        "Unexpected error during converted file cleanup for queue item pk=%s: %s",
+                        queue_item.pk, cleanup_err,
+                    )
 
     def _retrieve_ready_to_publish_items(self):
         """Retrieve all READY_TO_PUBLISH PUBLISH queue items."""
@@ -472,7 +482,59 @@ class GeoServerQueueExcutor:
         queue_item.success = self.result_success
         queue_item.publishing_result = self.publishing_log
         queue_item.save()
-    
+
+    def _cleanup_converted_file(self, queue_item: geoserver_queues.GeoServerQueue) -> None:
+        """Delete the converted file directory after a terminal GeoServer queue status.
+
+        Called from excute_ready_to_publish() once PUBLISHED or PUBLISH_FAILED has been
+        committed to the DB.
+        """
+        if not queue_item.converted_file_path:
+            return
+
+        gis_tmp_dir = pathlib.Path(decouple.config("GIS_TMP_DIR", default="/app/tmp"))
+        converted_path = pathlib.Path(queue_item.converted_file_path)
+
+        # Guard 1: only delete paths inside GIS_TMP_DIR.
+        # For GEOTIFF store_type, convert_layer() returns the original source file path
+        # (no conversion is performed). That path is under data_storage/, not GIS_TMP_DIR.
+        # relative_to() raises ValueError for paths outside GIS_TMP_DIR.
+        try:
+            converted_path.relative_to(gis_tmp_dir)
+        except ValueError:
+            log.info(
+                "Skipping cleanup of converted_file_path [%s]: not inside GIS_TMP_DIR [%s].",
+                converted_path, gis_tmp_dir,
+            )
+            return
+
+        # Guard 2: refuse to delete GIS_TMP_DIR itself.
+        # If converted_file_path were somehow /app/tmp/layer.gpkg (directly in the root),
+        # parent_dir would equal gis_tmp_dir and rmtree would wipe every queued file.
+        parent_dir = converted_path.parent
+        if parent_dir == gis_tmp_dir:
+            log.error(
+                "Refusing to delete converted_file_path parent [%s]: equals GIS_TMP_DIR root. "
+                "converted_file_path=[%s]",
+                parent_dir, converted_path,
+            )
+            return
+
+        shutil.rmtree(parent_dir, ignore_errors=True)
+        log.info("Cleaned up converted file directory: [%s]", parent_dir)
+
+        # Clear the path in the DB to prevent stale references.
+        # Wrapped in try/except: the file is already deleted and cannot be restored.
+        # A DB failure here must not re-raise or suppress the committed terminal status.
+        queue_item.converted_file_path = None
+        try:
+            queue_item.save(update_fields=["converted_file_path"])
+        except Exception as db_err:
+            log.error(
+                "Failed to clear converted_file_path on queue item pk=%s after cleanup: %s",
+                queue_item.pk, db_err,
+            )
+
 def push(publish_entry: "PublishEntry", symbology_only: bool, submitter: UserModel=None) -> bool:
     if not publish_entry.geoserver_channels.exists():
         log.info(f"'{publish_entry}' has no GeoServer Publish Channel")
