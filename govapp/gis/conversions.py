@@ -41,17 +41,22 @@ def to_geopackage(filepath: pathlib.Path, layer: str, catalogue_name: str, expor
     """
     log.info(f"Converting file '{filepath}' layer: '{layer}' to GeoPackage...")
 
+    work_dir: pathlib.Path | None = None
+    decompressed_dir: pathlib.Path | None = None
     try:
         # Decompress and Flatten if Required
+        original_filepath = filepath
         filepath = compression.decompress(filepath)
+        if filepath != original_filepath:
+            decompressed_dir = filepath
         filepath = compression.flatten(filepath)
 
         # Construct Output Filepath
         # Use local container storage (_WORK_DIR) for the GDAL conversion.
         # SQLite/GeoPackage requires local filesystem locking and does not
         # work reliably on network shares (e.g. Azure File Share).
-        work_dir = tempfile.mkdtemp(dir=_WORK_DIR)
-        output_filepath = pathlib.Path(work_dir) / f"{layer}.gpkg"
+        work_dir = pathlib.Path(tempfile.mkdtemp(dir=_WORK_DIR))
+        output_filepath = work_dir / f"{layer}.gpkg"
 
         # --- START: NEW LOGIC TO DETECT RASTER/VECTOR ---
         is_raster = filepath.suffix.lower() in ['.tif', '.tiff']
@@ -147,6 +152,11 @@ def to_geopackage(filepath: pathlib.Path, layer: str, catalogue_name: str, expor
     except Exception as e:
         log.error(f"Unexpected error converting file '{filepath}' layer: '{layer}' to GeoPackage: {e}", exc_info=True)
         raise
+    finally:
+        if work_dir is not None:
+            shutil.rmtree(work_dir, ignore_errors=True)
+        if decompressed_dir is not None:
+            shutil.rmtree(decompressed_dir, ignore_errors=True)
 
 
 def to_geojson(filepath: pathlib.Path, layer: str, catalogue_name: str = '', export_method: str = '') -> dict:
