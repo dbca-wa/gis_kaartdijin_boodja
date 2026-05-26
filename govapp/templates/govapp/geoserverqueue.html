@@ -1,5 +1,25 @@
 {% extends 'govapp/base.html' %}
 
+{% block extra_css %}
+<style>
+    #geoserver-queue-table table {
+        table-layout: fixed;
+    }
+    #geoserver-queue-table table col.col-id              { width: 6%; }
+    #geoserver-queue-table table col.col-type            { width: 7%; }
+    #geoserver-queue-table table col.col-publish-entry   { width: 12%; }
+    #geoserver-queue-table table col.col-submitter       { width: 10%; }
+    #geoserver-queue-table table col.col-status          { width: 10%; }
+    #geoserver-queue-table table col.col-started-at      { width: 10%; }
+    #geoserver-queue-table table col.col-results         { width: 36%; }
+    #geoserver-queue-table table col.col-created-at      { width: 9%; }
+    #geoserver-queue-table table td {
+        word-break: break-word;
+        overflow-wrap: break-word;
+    }
+</style>
+{% endblock %}
+
 {% block content %}
 
 {% if request.user.is_authenticated is True %}
@@ -115,8 +135,18 @@
                                     </div>
                               </div>
                         </div>
-                        <div id='geoserver-queue-table'>
+                        <div id='geoserver-queue-table' style="overflow-x: auto;">
                               <table id="example" class="table" style="width:100%">
+                                    <colgroup>
+                                          <col class="col-id">
+                                          <col class="col-type">
+                                          <col class="col-publish-entry">
+                                          <col class="col-submitter">
+                                          <col class="col-status">
+                                          <col class="col-started-at">
+                                          <col class="col-results">
+                                          <col class="col-created-at">
+                                    </colgroup>
                                     <thead class='table-dark' id="geoserver-queue-thead">
                                           <tr>
                                                 <th>ID</th>
