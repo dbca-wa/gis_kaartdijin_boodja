@@ -523,9 +523,12 @@ class GeoServerQueueExcutor:
         shutil.rmtree(parent_dir, ignore_errors=True)
         log.info("Cleaned up converted file directory: [%s]", parent_dir)
 
-        # Clear the path in the DB to prevent stale references.
-        # Wrapped in try/except: the file is already deleted and cannot be restored.
-        # A DB failure here must not re-raise or suppress the committed terminal status.
+        # Clear the path in the DB only when fully published.
+        # On PUBLISH_FAILED the stale path is kept so that a retry
+        # (reset to READY_TO_PUBLISH) can still derive the filename.
+        if queue_item.status != GeoServerQueueStatus.PUBLISHED:
+            return
+
         queue_item.converted_file_path = None
         try:
             queue_item.save(update_fields=["converted_file_path"])
