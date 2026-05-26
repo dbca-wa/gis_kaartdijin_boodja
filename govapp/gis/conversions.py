@@ -171,16 +171,21 @@ def to_geojson(filepath: pathlib.Path, layer: str, catalogue_name: str = '', exp
     """
     log.info(f"Converting file '{filepath}' layer: '{layer}' to GeoJSON...")
 
+    work_dir: pathlib.Path | None = None
+    decompressed_dir: pathlib.Path | None = None
     try:
         # Decompress and Flatten if Required
+        original_filepath = filepath
         filepath = compression.decompress(filepath)
+        if filepath != original_filepath:
+            decompressed_dir = filepath
         filepath = compression.flatten(filepath)
 
         # Construct Output Filepath
         # Use local container storage (_WORK_DIR) to avoid Azure File Share
         # rejecting utime/chmod calls made by ogr2ogr on the output file.
-        work_dir = tempfile.mkdtemp(dir=_WORK_DIR)
-        output_filepath = pathlib.Path(work_dir) / f"{layer}.geojson"
+        work_dir = pathlib.Path(tempfile.mkdtemp(dir=_WORK_DIR))
+        output_filepath = work_dir / f"{layer}.geojson"
 
         command = [
             "ogr2ogr",
@@ -221,6 +226,11 @@ def to_geojson(filepath: pathlib.Path, layer: str, catalogue_name: str = '', exp
     except Exception as e:
         log.error(f"Unexpected error converting file '{filepath}' layer: '{layer}' to GeoJSON: {e}")
         raise
+    finally:
+        if work_dir is not None:
+            shutil.rmtree(work_dir, ignore_errors=True)
+        if decompressed_dir is not None:
+            shutil.rmtree(decompressed_dir, ignore_errors=True)
 
 
 def to_shapefile(filepath: pathlib.Path, layer: str, catalogue_name: str, export_method: str) -> dict:
