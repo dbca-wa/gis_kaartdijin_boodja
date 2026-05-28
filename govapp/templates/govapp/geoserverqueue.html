@@ -52,8 +52,9 @@
                               <div class="collapse mt-2" id="status-guide-collapse">
                                     <div class="border rounded bg-light p-3">
 
-                                          <div class="fw-semibold mb-2 text-secondary small text-uppercase">Status Flow</div>
-                                          <div class="d-flex flex-wrap align-items-start gap-0">
+                                          <!-- Publish -->
+                                          <div class="fw-semibold mb-2 text-secondary small text-uppercase">Publish &mdash; Status Flow</div>
+                                          <div class="d-flex flex-wrap align-items-start gap-0 mb-3">
 
                                                 <div class="d-flex align-items-start">
                                                       <div class="text-center" style="width:115px;">
@@ -110,6 +111,38 @@
                                                 </div>
 
                                           </div>
+
+                                          <!-- Purge Cache -->
+                                          <hr class="my-2">
+                                          <div class="fw-semibold mb-2 text-secondary small text-uppercase">Purge Cache &mdash; Status Flow</div>
+                                          <div class="d-flex flex-wrap align-items-start gap-0">
+
+                                                <div class="d-flex align-items-start">
+                                                      <div class="text-center" style="width:115px;">
+                                                            <span class="badge bg-primary w-100 mb-1">READY</span>
+                                                            <div class="text-muted">Queued; awaiting cache purge.</div>
+                                                      </div>
+                                                      <div class="d-flex align-items-start pt-1 px-1 text-muted fw-bold">&rarr;</div>
+                                                </div>
+
+                                                <div class="d-flex align-items-start">
+                                                      <div class="text-center" style="width:115px;">
+                                                            <span class="badge bg-warning text-dark w-100 mb-1">PROCESSING</span>
+                                                            <div class="text-muted">Purging tile cache.</div>
+                                                            <div class="text-muted my-1">&darr;</div>
+                                                            <span class="badge bg-danger w-100 mb-1">FAILED</span>
+                                                            <div class="text-muted">Cache purge failed.</div>
+                                                      </div>
+                                                      <div class="d-flex align-items-start pt-1 px-1 text-muted fw-bold">&rarr;</div>
+                                                </div>
+
+                                                <div class="text-center" style="width:115px;">
+                                                      <span class="badge bg-success w-100 mb-1">PURGED</span>
+                                                      <div class="text-muted">Tile cache purged successfully.</div>
+                                                </div>
+
+                                          </div>
+
                                     </div>
                               </div>
                         </div>
