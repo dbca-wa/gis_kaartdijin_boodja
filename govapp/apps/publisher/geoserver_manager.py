@@ -183,7 +183,7 @@ class GeoServerQueueExcutor:
             self._add_publishing_log(f"[{geoserver_publish_channel.publish_entry.name} - {geoserver_publish_channel.geoserver_pool.url}] Publishing succeed.")
             
         else :
-            self.result_status = GeoServerQueueStatus.FAILED
+            self.result_status = GeoServerQueueStatus.PUBLISH_FAILED
             self.result_success = False
             self._add_publishing_log(f"[{geoserver_publish_channel.publish_entry.name} - {geoserver_publish_channel.geoserver_pool.url}] Publishing failed.")
             self._add_publishing_log(f"[{geoserver_publish_channel.publish_entry.name} - {geoserver_publish_channel.geoserver_pool.url}] {exc}")
