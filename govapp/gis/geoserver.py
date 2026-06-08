@@ -919,10 +919,50 @@ class GeoServer:
             layer (str): Name of the layer to upload GeoPackage for.
             filepath (pathlib.Path): Path to the Geopackage file to upload.
         """
+        # --- START OF ROBUST CONTEXT PREPARATION ---
+        # 1. Force override_bbox to True
+        context['override_bbox'] = True
+
+        # 2. Ensure CRS is not empty
+        context['native_crs'] = context.get('native_crs') or 'EPSG:4326'
+        context['crs'] = context.get('crs') or context['native_crs']
+
+        # 3. Ensure Bounding Box values are NOT empty
+        # If any value is missing, we populate the entire dictionary with WA defaults.
+        nbb = context.get('nativeBoundingBox')
+        if not nbb or not nbb.get('minx'):
+            log.warning(f"BoundingBox missing in context for {layer_name}. Applying emergency defaults.")
+            # Default to Western Australia bounds
+            context['nativeBoundingBox'] = {
+                'minx': 112.9,
+                'maxx': 129.0,
+                'miny': -35.2,
+                'maxy': -13.5,
+                'crs': context['native_crs']
+            }
+        
+        lbb = context.get('latLonBoundingBox')
+        if not lbb or not lbb.get('minx'):
+            context['latLonBoundingBox'] = {
+                'minx': 112.9,
+                'maxx': 129.0,
+                'miny': -35.2,
+                'maxy': -13.5,
+                'crs': 'EPSG:4326'
+            }
+
+        # 4. Identity
+        context['name'] = context.get('name') or layer_name
+        context['enabled'] = context.get('enabled') if context.get('enabled') is not None else True
+        # --- END OF ROBUST CONTEXT PREPARATION ---
+
         # Log
         log.info(f"Uploading WFS/Postgis Layer to GeoServer...")
-        
+
+        # Render the template        
         data_in_json = render_to_string('govapp/geoserver/wfs/wfs_layer.json', context)
+
+        # Construct URLs
         layer_get_url = f"{self.service_url}/rest/workspaces/{workspace}/datastores/{store_name}/featuretypes/{layer_name}"
 
         # Check if Layer Exists
@@ -933,8 +973,9 @@ class GeoServer:
             timeout=120.0
         )
         log.info(f'Layer existence check response: {response.status_code}')
+
         if response.status_code == 200:
-            log.info(f'Layer: [{layer_name}] exists. Perform delete request.')
+            log.info(f'Layer: [{layer_name}] exists. Deleting for re-creation...')
             delete_response = httpx.delete(
                 url=layer_get_url+"?recurse=true",
                 auth=(self.username, self.password),
