@@ -1,38 +1,36 @@
 { 
     "featureType": {
-        "name":	"{{name|escape}}",
-        "description":	"{{description|escape}}",
-        {% if native_name %}"nativeName": "{{native_name|escape}}",{% endif %}
-        {% if title %}"title": "{{title|escape}}",{% endif %}
-        {% if abstract %}"abstract": "{{abstract|escape}}",{% endif %}
+        "name": "{{ name|escape }}",
+        "description": "{{ description|default:""|escape }}",
+        {% if native_name %}"nativeName": "{{ native_name|escape }}",{% endif %}
+        {% if title %}"title": "{{ title|escape }}",{% endif %}
+        {% if abstract %}"abstract": "{{ abstract|escape }}",{% endif %}
+        
         {% if override_bbox %}
-        "nativeCRS": "{{native_crs|escape}}",
-        "srs": "{{crs|escape}}",
+        "nativeCRS": "{{ native_crs|escape }}",
+        "srs": "{{ crs|escape }}",
         "nativeBoundingBox": {
             "minx": {{ nativeBoundingBox.minx }},
             "maxx": {{ nativeBoundingBox.maxx }},
             "miny": {{ nativeBoundingBox.miny }},
             "maxy": {{ nativeBoundingBox.maxy }},
-            "crs": "{{ nativeBoundingBox.crs }}"
-          },
-          "latLonBoundingBox": {
+            "crs": "{{ nativeBoundingBox.crs|escape }}"
+        },
+        "latLonBoundingBox": {
             "minx": {{ latLonBoundingBox.minx }},
             "maxx": {{ latLonBoundingBox.maxx }},
             "miny": {{ latLonBoundingBox.miny }},
             "maxy": {{ latLonBoundingBox.maxy }},
-            "crs": "{{ latLonBoundingBox.crs }}"
-          },
+            "crs": "EPSG:4326"
+        },
         {% endif %}
-        "enabled": {{enabled|escape}},
+        
+        "enabled": {{ enabled|yesno:"true,false" }},
         "keywords": [
             {% for k in keywords %}
                 {
-                    "string": "{{ k }}"
-                {% if forloop.last %}
-                }
-                {% else %}
-                },
-                {% endif %}
+                    "string": "{{ k|escape }}"
+                }{% if not forloop.last %},{% endif %}
             {% endfor %}
         ]
     }
