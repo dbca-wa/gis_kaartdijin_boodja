@@ -1,5 +1,5 @@
 # Prepare the base environment.
-FROM ubuntu:24.04 AS builder_base_gis_kaartdijin_boodja
+FROM ghcr.io/dbca-wa/docker-apps-dev:ubuntu_2604_base_python AS builder_base_gis_kaartdijin_boodja
 MAINTAINER asi@dbca.wa.gov.au
 ENV DEBIAN_FRONTEND=noninteractive
 ENV DEBUG=True
@@ -8,6 +8,8 @@ ENV PRODUCTION_EMAIL=True
 ENV SECRET_KEY="ThisisNotRealKey"
 ENV SITE_DOMAIN='dbca.wa.gov.au'
 ENV BPAY_ALLOWED=False
+ENV VIRTUAL_ENV=/app/venv
+ENV PATH=$VIRTUAL_ENV/bin:$PATH
 
 RUN sed 's/archive.ubuntu.com/en.archive.ubuntu.com/g' /etc/apt/sources.list > /etc/apt/sourcesau.list
 RUN mv /etc/apt/sourcesau.list /etc/apt/sources.list
@@ -16,15 +18,14 @@ RUN mv /etc/apt/sourcesau.list /etc/apt/sources.list
 RUN apt-get clean
 RUN apt-get update
 RUN apt-get upgrade -y
-RUN apt-get install --no-install-recommends -y curl wget git libmagic-dev gcc binutils python3 python3-setuptools python3-dev python3-pip tzdata cron gpg-agent
-RUN apt-get install --no-install-recommends -y libpq-dev patch virtualenv
-RUN apt-get install --no-install-recommends -y postgresql-client mtr systemd
-RUN apt-get install --no-install-recommends -y vim postgresql-client ssh htop
+# RUN apt-get install --no-install-recommends -y curl wget git libmagic-dev gcc binutils python3 python3-setuptools python3-dev python3-pip tzdata cron gpg-agent
+RUN apt-get install --no-install-recommends -y gpg-agent
+RUN apt-get install --no-install-recommends -y vim htop
 RUN apt-get install --no-install-recommends -y software-properties-common 
  
 # ADDED START from bottom
 RUN apt-get install --no-install-recommends -y python3-pil
-RUN apt-get install --no-install-recommends -y postgis 
+# RUN apt-get install --no-install-recommends -y postgis 
 # ADDED END from bottom
 
 # Install GDAL
@@ -35,10 +36,10 @@ RUN apt-get install --no-install-recommends -y libgdal-dev build-essential
 
 RUN update-ca-certificates
 # install node 18
-RUN touch install_node.sh
-RUN curl -fsSL https://deb.nodesource.com/setup_18.x -o install_node.sh
-RUN chmod +x install_node.sh && ./install_node.sh
-RUN apt-get install -y nodejs
+# RUN touch install_node.sh
+# RUN curl -fsSL https://deb.nodesource.com/setup_18.x -o install_node.sh
+# RUN chmod +x install_node.sh && ./install_node.sh
+# RUN apt-get install -y nodejs
 # RUN ln -s /usr/bin/python3.10 /usr/bin/python
 #RUN pip install --upgrade pip
 #RUN wget -O /tmp/GDAL-3.8.3-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl https://github.com/girder/large_image_wheels/raw/wheelhouse/GDAL-3.8.3-cp310-cp310-manylinux_2_17_x86_64.manylinux2014_x86_64.whl#sha256=e2fe6cfbab02d535bc52c77cdbe1e860304347f16d30a4708dc342a231412c57
@@ -66,19 +67,11 @@ RUN chmod 755 /startup.sh
 
 WORKDIR /app
 USER oim
-#ENV POETRY_VERSION=1.3.2
-RUN virtualenv /app/venv
-ENV PATH=/app/venv/bin:$PATH
+RUN python3 -m venv $VIRTUAL_ENV
 RUN git config --global --add safe.directory /app
-# RUN curl -sSL https://install.python-poetry.org | python -
-#RUN ln -s /root/.local/bin/poetry /usr/bin/poetry
-#RUN poetry config virtualenvs.create false
-#COPY pyproject.toml poetry.lock ./
 COPY requirements.txt ./
 RUN pip install --upgrade pip && \
     pip install -r requirements.txt
-#RUN pip install "poetry==$POETRY_VERSION"
-#RUN poetry install 
 
 # Install the project (ensure that frontend projects have been built prior to this step).
 FROM python_libs_gis_kaartdijin_boodja
@@ -92,8 +85,11 @@ COPY python-cron ./
 #RUN pip install GDAL==3.8.4
 RUN python manage.py collectstatic --noinput
 
+# Cleanup
 USER root
-RUN rm -rf /var/lib/{apt,dpkg,cache,log}/ /tmp/* /var/tmp/*
+RUN wget https://raw.githubusercontent.com/dbca-wa/wagov_utils/refs/heads/main/wagov_utils/bin/package_cleanup_2604.sh -O /tmp/package_cleanup_2604.sh
+RUN chmod 755 /tmp/package_cleanup_2604.sh
+RUN /tmp/package_cleanup_2604.sh
 USER oim
 
 EXPOSE 8080
