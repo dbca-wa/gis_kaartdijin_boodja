@@ -19,6 +19,7 @@ RUN apt-get clean
 RUN apt-get update
 RUN apt-get upgrade -y
 # RUN apt-get install --no-install-recommends -y curl wget git libmagic-dev gcc binutils python3 python3-setuptools python3-dev python3-pip tzdata cron gpg-agent
+RUN apt-get install --no-install-recommends -y python3-venv
 RUN apt-get install --no-install-recommends -y gpg-agent
 RUN apt-get install --no-install-recommends -y vim htop
 RUN apt-get install --no-install-recommends -y software-properties-common 
@@ -29,8 +30,8 @@ RUN apt-get install --no-install-recommends -y python3-pil
 # ADDED END from bottom
 
 # Install GDAL
-RUN add-apt-repository ppa:ubuntugis/ubuntugis-unstable
-RUN apt update
+# RUN add-apt-repository ppa:ubuntugis/ubuntugis-unstable
+# RUN apt update
 RUN apt-get install --no-install-recommends -y gdal-bin python3-gdal
 RUN apt-get install --no-install-recommends -y libgdal-dev build-essential
 
@@ -70,12 +71,29 @@ USER oim
 RUN python3 -m venv $VIRTUAL_ENV
 RUN git config --global --add safe.directory /app
 COPY requirements.txt ./
-RUN pip install --upgrade pip && \
-    pip install -r requirements.txt
+
+# --- GDAL SETUP START ---
+# 1. Provide the compiler with explicit paths to the GDAL C++ header files.
+# In newer Ubuntu 26.04 / Python 3.14+ environments, the build system often fails 
+# to automatically locate 'gdal.h'. These environment variables ensure the Python 
+# wrapper can find the underlying C++ headers required for compilation.
+ENV CPLUS_INCLUDE_PATH=/usr/include/gdal
+ENV C_INCLUDE_PATH=/usr/include/gdal
+
+# 2. Synchronize and pre-install the Python GDAL package with the system library version.
+# GDAL's Python bindings are extremely sensitive to version mismatches with the 
+# system's 'libgdal'. By detecting the version via 'gdal-config' and installing it 
+# separately, we avoid the "Failed to build GDAL" errors that occur when pip tries 
+# to compile an incompatible version from 'requirements.txt'.
+RUN export GDAL_VERSION=$(gdal-config --version) && \
+    pip install --upgrade pip setuptools wheel && \
+    pip install "GDAL==${GDAL_VERSION}.*"
+# --- GDAL SETUP END ---
+
+RUN pip install -r requirements.txt
 
 # Install the project (ensure that frontend projects have been built prior to this step).
 FROM python_libs_gis_kaartdijin_boodja
-
 
 COPY --chown=oim:oim gunicorn.ini manage.py ./
 RUN touch /app/.env
