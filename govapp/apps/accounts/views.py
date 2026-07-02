@@ -30,6 +30,7 @@ GroupModel = models.Group
 @utils.extend_schema(tags=["Accounts - Users"])
 class UserViewSet(viewsets.ReadOnlyModelViewSet):
     """User View Set."""
+    permission_classes = [permissions.IsAuthenticated]
     queryset = UserModel.objects.all()
     serializer_class = serializers.UserSerializer
     filterset_class = filters.UserFilter
@@ -58,6 +59,7 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet):
 @utils.extend_schema(tags=["Accounts - Groups"])
 class GroupViewSet(viewsets.ReadOnlyModelViewSet):
     """Group View Set."""
+    permission_classes = [permissions.IsAuthenticated]
     queryset = GroupModel.objects.all()
     serializer_class = serializers.GroupSerializer
 
