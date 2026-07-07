@@ -32,8 +32,7 @@ RUN apt-get install --no-install-recommends -y vim htop
 RUN apt-get install --no-install-recommends -y software-properties-common 
  
 # ADDED START from bottom
-RUN apt-get install --no-install-recommends -y python3-pil
-# RUN apt-get install --no-install-recommends -y postgis 
+RUN apt-get install --no-install-recommends -y python3-pil postgis
 # ADDED END from bottom
 
 # Install GDAL
