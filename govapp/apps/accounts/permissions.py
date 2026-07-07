@@ -18,6 +18,13 @@ class IsInCatalogueAdminGroup(permissions.BasePermission):
         return utils.is_catalogue_admin(request.user)
 
 
+class IsInCatalogueEditorsGroup(permissions.BasePermission):
+    """Permissions for the a user in the Catalogue Editors group."""
+    def has_permission(self, request, view):
+        # Assuming utils.is_catalogue_editor exists, otherwise use request.user.groups.filter
+        return request.user.is_authenticated and utils.is_catalogue_editor(request.user)
+
+
 class IsInAdministratorsGroup(permissions.BasePermission):
     """Permissions for the a user in the Administrators group."""
 
@@ -86,6 +93,7 @@ class BaseStaffSuperuserPermission(permissions.BasePermission):
                 return True
         return False
 
+
 class CanAccessOptionMenu(BaseStaffSuperuserPermission):
     pass
 
@@ -101,3 +109,20 @@ class IsApiUser(permissions.BasePermission):
 
     def has_permission(self, request, view):
         return request.user.is_authenticated and utils.is_api_user(request.user)
+
+
+# A combined permission for any privileged access to account lists
+class HasAccountManagementAccess(permissions.BasePermission):
+    """Permissions for users who can view the full staff directory."""
+    def has_permission(self, request, view):
+        if not request.user.is_authenticated:
+            return False
+        
+        return (
+            utils.is_administrator(request.user) or
+            utils.is_catalogue_admin(request.user) or
+            utils.is_catalogue_editor(request.user) or
+            utils.is_api_user(request.user) or
+            request.user.is_superuser or
+            request.user.is_staff
+        )
