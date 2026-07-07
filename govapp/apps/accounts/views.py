@@ -19,6 +19,7 @@ from rest_framework import permissions
 from govapp import settings
 from govapp.apps.accounts import serializers
 from govapp.apps.accounts import filters
+from govapp.apps.accounts.permissions import HasAccountManagementAccess
 from govapp.apps.accounts.utils import get_file_list
 
 
@@ -44,7 +45,7 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet):
             return [permissions.IsAuthenticated()]
         
         # Applying the specific permission for listing/retrieving users
-        return [permissions.HasAccountManagementAccess()]
+        return [HasAccountManagementAccess()]
 
     @utils.extend_schema(request=None, responses=serializers.UserSerializer)
     @decorators.action(detail=False, methods=["GET"])
@@ -70,7 +71,7 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet):
 @utils.extend_schema(tags=["Accounts - Groups"])
 class GroupViewSet(viewsets.ReadOnlyModelViewSet):
     """Group View Set."""
-    permission_classes = [permissions.HasAccountManagementAccess]
+    permission_classes = [HasAccountManagementAccess]
     queryset = GroupModel.objects.all()
     serializer_class = serializers.GroupSerializer
 
