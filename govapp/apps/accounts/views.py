@@ -30,10 +30,21 @@ GroupModel = models.Group
 @utils.extend_schema(tags=["Accounts - Users"])
 class UserViewSet(viewsets.ReadOnlyModelViewSet):
     """User View Set."""
-    permission_classes = [permissions.IsAuthenticated]
     queryset = UserModel.objects.all()
     serializer_class = serializers.UserSerializer
     filterset_class = filters.UserFilter
+
+    def get_permissions(self):
+        """
+        Custom permissions for UserViewSet.
+        - 'me': Accessible by any logged-in user.
+        - others: Restricted to account management groups.
+        """
+        if self.action == "me":
+            return [permissions.IsAuthenticated()]
+        
+        # Applying the specific permission for listing/retrieving users
+        return [permissions.HasAccountManagementAccess()]
 
     @utils.extend_schema(request=None, responses=serializers.UserSerializer)
     @decorators.action(detail=False, methods=["GET"])
@@ -59,7 +70,7 @@ class UserViewSet(viewsets.ReadOnlyModelViewSet):
 @utils.extend_schema(tags=["Accounts - Groups"])
 class GroupViewSet(viewsets.ReadOnlyModelViewSet):
     """Group View Set."""
-    permission_classes = [permissions.IsAuthenticated]
+    permission_classes = [permissions.HasAccountManagementAccess]
     queryset = GroupModel.objects.all()
     serializer_class = serializers.GroupSerializer
 
