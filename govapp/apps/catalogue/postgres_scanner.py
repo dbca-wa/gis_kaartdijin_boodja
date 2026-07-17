@@ -214,7 +214,11 @@ class Scanner:
                 log.info(f"Custom query for the CatalogueEntry: [{catalogue_entry_obj}] returned no results. No shapefile was created, which is a valid outcome.")
             elif co is False:
                 # Case 3: Unexpectedly failed to create shapefile
-                log.info(f"Unexpectedly, no shapefile was created for the CatalogueEntry: [{catalogue_entry_obj}].  Check the the previous before.")
+                # log.info(f"Unexpectedly, no shapefile was created for the CatalogueEntry: [{catalogue_entry_obj}].  Check the the previous before.")
+                log.error(
+                    f"Unexpectedly, no shapefile was created for the CatalogueEntry: [{catalogue_entry_obj}]. "
+                    f"This usually indicates a failure in pgsql2shp execution. Please check the conversion logs above for details."
+                )
 
             # Step 3: Update the timestamp regardless of the results.  We don't want cron to keep trying to perform the postgres_to_shapefile until success.
             log.info(f"Updating last_job_run timestamp for CatalogueEntry: [{catalogue_entry_obj}].")
