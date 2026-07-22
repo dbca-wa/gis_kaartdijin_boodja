@@ -83,17 +83,16 @@ class IsCatalogueEntryPermissions(permissions.BasePermission):
             # Update and Partial Update
             # Check Catalogue Entry specific permissions
             # 1. Object is a Catalogue Entry
-            # 2. User is in the Catalogue Editors group
-            # 3. User is one of this Catalogue Entry's editors
-            # 4. Catalogue Entry is `assigned_to` this user
-            # 5. Catalogue Entry is unlocked
+            # 2. Catalogue Entry is unlocked
+            # 3a. User is an administrator AND is assigned to this entry, OR
+            # 3b. User has READ_WRITE access permission on this entry
             allowed = (
                 isinstance(obj, models.catalogue_entries.CatalogueEntry)
-                #and utils.is_catalogue_editor(request.user)
-                #and obj.is_editor(request.user)
-                and utils.is_administrator(request.user)
-                and obj.assigned_to == request.user
                 and obj.is_unlocked()
+                and (
+                    (utils.is_administrator(request.user) and obj.assigned_to == request.user)
+                    or obj.get_user_access_permission(request.user) == 'read_write'
+                )
             )
 
         elif view.action in ("lock", "unlock", "decline"):
