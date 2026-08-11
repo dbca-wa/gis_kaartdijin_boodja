@@ -114,6 +114,7 @@ USER root
 RUN wget https://raw.githubusercontent.com/dbca-wa/wagov_utils/refs/heads/main/wagov_utils/bin/package_cleanup_2604.sh -O /tmp/package_cleanup_2604.sh
 RUN chmod 755 /tmp/package_cleanup_2604.sh
 RUN /tmp/package_cleanup_2604.sh
+RUN apt purge -y linux-libc-dev
 USER oim
 
 EXPOSE 8080
