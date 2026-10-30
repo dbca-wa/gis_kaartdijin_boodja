@@ -558,7 +558,7 @@ class GeoServerPool(mixins.RevisionedMixin):
         for user_in_geoserver in all_users_in_geoserver:
             user_exists_in_kb = any(user_in_geoserver['userName'] == user_in_kb.email for user_in_kb in all_users_in_kb)
 
-            if not user_exists_in_kb and user_exists_in_kb not in settings.NON_DELETABLE_USERS:
+            if not user_exists_in_kb and user_in_geoserver['userName'] not in settings.NON_DELETABLE_USERS:
                 log.info(f'User: [{user_in_geoserver}] exists in the geoserver: [{self}], but not in KB.')
                 self.delete_existing_user(user_in_geoserver['userName'], settings.GEOSERVER_USERGROUP_SERVICE_NAME_CUSTOM)
 
