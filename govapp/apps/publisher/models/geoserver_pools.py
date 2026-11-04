@@ -657,29 +657,36 @@ class GeoServerPool(mixins.RevisionedMixin):
                 self.associate_role_with_user(user.email, role_in_kb.name)
         return roles_for_user_in_kb
 
-    def create_or_update_user(self, user):
-        """Create or update a user in GeoServer."""
-        user_data = {
-            "user": {
-                "userName": user.email,
-                "password": generate_random_password(50),
-                "enabled": user.is_active
-            }
-        }
+    def create_or_update_user(self, user, existing_users):
+        """Create a user in GeoServer, or update it only when its enabled state has changed.
 
-        # Check if user already exists
-        existing_users = self.get_all_users(settings.GEOSERVER_USERGROUP_SERVICE_NAME_CUSTOM)
-        user_exists = any(user_in_geoserver['userName'] == user_data['user']['userName'] for user_in_geoserver in existing_users)
+        existing_users maps user names to the users in GeoServer, and is kept up to date here.
+        """
+        existing_user = existing_users.get(user.email)
 
-        # Create/Update user
-        if user_exists:
-            log.info(f'User: [{user.email}] exists in the geoserver: [{self}]')
-            response = self.update_existing_user(user_data, settings.GEOSERVER_USERGROUP_SERVICE_NAME_CUSTOM)
-        else:
+        if existing_user is None:
             log.info(f'User: [{user.email}] does not exist in the geoserver: [{self}]')
-            response = self.create_new_user(user_data, settings.GEOSERVER_USERGROUP_SERVICE_NAME_CUSTOM)
-
-        response.raise_for_status()
+            user_data = {
+                "user": {
+                    "userName": user.email,
+                    "password": generate_random_password(50),
+                    "enabled": user.is_active
+                }
+            }
+            self.create_new_user(user_data, settings.GEOSERVER_USERGROUP_SERVICE_NAME_CUSTOM)
+            existing_users[user.email] = {"userName": user.email, "enabled": user.is_active}
+        elif existing_user.get('enabled') != user.is_active:
+            log.info(f'User: [{user.email}] exists in the geoserver: [{self}], but its enabled state has changed.')
+            user_data = {
+                "user": {
+                    "userName": user.email,
+                    "enabled": user.is_active
+                }
+            }
+            self.update_existing_user(user_data, settings.GEOSERVER_USERGROUP_SERVICE_NAME_CUSTOM)
+            existing_user['enabled'] = user.is_active
+        else:
+            log.info(f'User: [{user.email}] exists in the geoserver: [{self}], and is up to date.')
 
     def sync_users_groups_users_roles(self):
         """Synchronize users-groups and users-roles with GeoServer."""
@@ -698,11 +705,16 @@ class GeoServerPool(mixins.RevisionedMixin):
         # Sync all the roles
         self.sync_roles()
 
+        existing_users = {
+            user_in_geoserver['userName']: user_in_geoserver
+            for user_in_geoserver in self.get_all_users(settings.GEOSERVER_USERGROUP_SERVICE_NAME_CUSTOM)
+        }
+
         for user in users:
             if not user.email:
                 log.warning(f'User: [ID: {user.id}, username: {user.username}, first_name: {user.first_name}, last_name: {user.last_name}] does not have email address.  Skip the geoserver process for this user.')
                 continue
-            self.create_or_update_user(user)
+            self.create_or_update_user(user, existing_users)
 
             # Sync relations between users and groups
             groups_for_user_in_kb = self.associate_user_with_groups(user)
