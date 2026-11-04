@@ -26,6 +26,10 @@ UserModel = get_user_model()
 # instead of logging one error per user on every run.
 MAX_CONSECUTIVE_USER_SYNC_FAILURES = 10
 
+# Each write to a user/group service makes GeoServer save and reload the whole user file,
+# which takes many seconds when it holds thousands of users. The httpx default is 5 seconds.
+GEOSERVER_USERGROUP_WRITE_TIMEOUT_SECONDS = 60
+
 
 def encode(s):
     # s = urllib.parsquote(s, safe='')
@@ -296,7 +300,8 @@ class GeoServerPool(mixins.RevisionedMixin):
             url=url,
             headers=self.headers_json,
             content=json.dumps(user_data),
-            auth=self.auth
+            auth=self.auth,
+            timeout=GEOSERVER_USERGROUP_WRITE_TIMEOUT_SECONDS
         )
         response.raise_for_status()
         log.info(f"User: [{user_data['user']['userName']}] has been updated successfully in GeoServer: [{self}].")
@@ -309,7 +314,8 @@ class GeoServerPool(mixins.RevisionedMixin):
             url=url,
             headers=self.headers_json,
             content=json.dumps(user_data),
-            auth=self.auth
+            auth=self.auth,
+            timeout=GEOSERVER_USERGROUP_WRITE_TIMEOUT_SECONDS
         )
         response.raise_for_status()
         log.info(f"User: [{user_data['user']['userName']}] has been created successfully in the GeoServer: [{self}].")
@@ -325,7 +331,8 @@ class GeoServerPool(mixins.RevisionedMixin):
         url = f"{self.base_url_security}/usergroup/service/{encode(service_name)}/user/{encode(username)}.json" if service_name else f"{self.base_url_security}/usergroup/user/{encode(username)}.json"
         response = httpx.delete(
             url=url,
-            auth=self.auth
+            auth=self.auth,
+            timeout=GEOSERVER_USERGROUP_WRITE_TIMEOUT_SECONDS
         )
         response.raise_for_status()
         log.info(f"User: [{username}] has been deleted successfully from the GeoServer: [{self}].")
@@ -374,7 +381,8 @@ class GeoServerPool(mixins.RevisionedMixin):
         url = f"{self.base_url_security}/usergroup/service/{encode(service_name)}/group/{encode(group_name)}.json" if service_name else f"{self.base_url_security}/usergroup/group/{encode(group_name)}.json"
         response = httpx.post(
             url=url,
-            auth=self.auth
+            auth=self.auth,
+            timeout=GEOSERVER_USERGROUP_WRITE_TIMEOUT_SECONDS
         )
         response.raise_for_status()
         log.info(f"Group: [{group_name}] has been created successfully in the GeoServer: [{self}].")
@@ -390,7 +398,8 @@ class GeoServerPool(mixins.RevisionedMixin):
         url = f"{self.base_url_security}/usergroup/service/{encode(service_name)}/group/{encode(group_name)}.json" if service_name else f"{self.base_url_security}/usergroup/group/{encode(group_name)}.json"
         response = httpx.delete(
             url=url,
-            auth=self.auth
+            auth=self.auth,
+            timeout=GEOSERVER_USERGROUP_WRITE_TIMEOUT_SECONDS
         )
         response.raise_for_status()
         log.info(f"Group: [{group_name}] has been deleted successfully from the GeoServer: [{self}].")
@@ -403,7 +412,8 @@ class GeoServerPool(mixins.RevisionedMixin):
         url = f"{self.base_url_security}/usergroup/service/{encode(service_name)}/user/{encode(username)}/group/{encode(group_name)}.json" if service_name else f"{self.base_url_security}/usergroup/user/{encode(username)}/group/{encode(group_name)}.json"
         response = httpx.post(
             url=url,
-            auth=self.auth
+            auth=self.auth,
+            timeout=GEOSERVER_USERGROUP_WRITE_TIMEOUT_SECONDS
         )
         response.raise_for_status()
         log.info(f"User: [{username}] has been successfully associated with the group: [{group_name}] in the GeoServer: [{self}].")
@@ -416,7 +426,8 @@ class GeoServerPool(mixins.RevisionedMixin):
         url = f"{self.base_url_security}/usergroup/service/{encode(service_name)}/user/{encode(username)}/group/{encode(group_name)}.json" if service_name else f"{self.base_url_security}/usergroup/user/{encode(username)}/group/{encode(group_name)}.json"
         response = httpx.delete(
             url=url,
-            auth=self.auth
+            auth=self.auth,
+            timeout=GEOSERVER_USERGROUP_WRITE_TIMEOUT_SECONDS
         )
         response.raise_for_status()
         log.info(f"User: [{username}] has been successfully unassociated from the group: [{group_name}] in the GeoServer: [{self}].")
