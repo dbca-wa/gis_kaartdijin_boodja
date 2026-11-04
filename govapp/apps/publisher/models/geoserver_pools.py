@@ -372,6 +372,7 @@ class GeoServerPool(mixins.RevisionedMixin):
             url=url,
             auth=self.auth
         )
+        response.raise_for_status()
         log.info(f"Group: [{group_name}] has been created successfully in the GeoServer: [{self}].")
         return response
 
