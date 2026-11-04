@@ -22,6 +22,10 @@ from govapp.common.utils import calculate_dict_differences, generate_random_pass
 log = logging.getLogger(__name__)
 UserModel = get_user_model()
 
+# Stop the user sync early when GeoServer rejects every write (e.g. a stale lock file),
+# instead of logging one error per user on every run.
+MAX_CONSECUTIVE_USER_SYNC_FAILURES = 10
+
 
 def encode(s):
     # s = urllib.parsquote(s, safe='')
@@ -689,13 +693,17 @@ class GeoServerPool(mixins.RevisionedMixin):
             log.info(f'User: [{user.email}] exists in the geoserver: [{self}], and is up to date.')
 
     def sync_users_groups_users_roles(self):
-        """Synchronize users-groups and users-roles with GeoServer."""
+        """Synchronize users-groups and users-roles with GeoServer.
+
+        A user that fails is logged and skipped, so the other users are still synced.
+        Returns the IDs of the users that failed.
+        """
         log.info(f'Synchronize users-groups and users-roles in the geoserver: [{self}]...')
 
         # Retrieve only users associated with active roles or groups
         users = UserModel.objects.filter(
             Q(geoserverroleuser__geoserver_role__active=True) |
-            Q(geoservergroupuser__geoserver_group__active=True)).distinct()
+            Q(geoservergroupuser__geoserver_group__active=True)).distinct().order_by('id')
 
         log.info(f'Users associated with active GeoServerRole or GeoServerGroup: [{users}]')
 
@@ -710,19 +718,34 @@ class GeoServerPool(mixins.RevisionedMixin):
             for user_in_geoserver in self.get_all_users(settings.GEOSERVER_USERGROUP_SERVICE_NAME_CUSTOM)
         }
 
+        failed_user_ids = []
+        consecutive_failures = 0
         for user in users:
             if not user.email:
                 log.warning(f'User: [ID: {user.id}, username: {user.username}, first_name: {user.first_name}, last_name: {user.last_name}] does not have email address.  Skip the geoserver process for this user.')
                 continue
-            self.create_or_update_user(user, existing_users)
 
-            # Sync relations between users and groups
-            groups_for_user_in_kb = self.associate_user_with_groups(user)
-            self.disassociate_user_from_groups(user, groups_for_user_in_kb)
+            try:
+                self.create_or_update_user(user, existing_users)
 
-            # Sync relations between users and roles
-            roles_for_user_in_kb = self.associate_user_with_roles(user)
-            self.disassociate_user_from_roles(user, roles_for_user_in_kb)
+                # Sync relations between users and groups
+                groups_for_user_in_kb = self.associate_user_with_groups(user)
+                self.disassociate_user_from_groups(user, groups_for_user_in_kb)
+
+                # Sync relations between users and roles
+                roles_for_user_in_kb = self.associate_user_with_roles(user)
+                self.disassociate_user_from_roles(user, roles_for_user_in_kb)
+            except httpx.HTTPError as e:
+                failed_user_ids.append(user.id)
+                consecutive_failures += 1
+                log.error(f'Failed to sync the user: [ID: {user.id}] to the geoserver: [{self}]: {e}')
+                if consecutive_failures >= MAX_CONSECUTIVE_USER_SYNC_FAILURES:
+                    log.error(f'Stopping the user sync for the geoserver: [{self}] after {consecutive_failures} consecutive failures.')
+                    break
+            else:
+                consecutive_failures = 0
+
+        return failed_user_ids
 
     def sync_relations_groups_roles(self, group_in_kb):
         # Associate group with roles
