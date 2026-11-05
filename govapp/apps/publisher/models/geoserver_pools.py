@@ -535,13 +535,25 @@ class GeoServerPool(mixins.RevisionedMixin):
         log.info(f"Role: [{role_name}] has been disassociated successfully from the group: [{group_name}] in the GeoServer: [{self}].")
         return response
 
+    @staticmethod
+    def get_users_to_sync():
+        """Return the users to sync with GeoServer.
+
+        Only users who get at least one active role, directly or through an active group, are
+        synced. Members of groups without roles (e.g. DBCA_Users, which holds all staff) are
+        skipped: they would get nothing in GeoServer, and saving thousands of users makes
+        GeoServer very slow.
+        """
+        groups_with_roles = GeoServerGroup.objects.filter(active=True, geoserver_roles__active=True)
+        return UserModel.objects.filter(
+            Q(geoserverroleuser__geoserver_role__active=True) |
+            Q(geoservergroupuser__geoserver_group__in=groups_with_roles)).distinct().order_by('id')
+
     def cleanup_users(self):
         log.info(f'Cleaning up users in the geoserver: [{self}]...')
 
         all_users_in_geoserver = self.get_all_users(settings.GEOSERVER_USERGROUP_SERVICE_NAME_CUSTOM)
-        all_users_in_kb = UserModel.objects.filter(
-            Q(geoserverroleuser__geoserver_role__active=True) |
-            Q(geoservergroupuser__geoserver_group__active=True)).distinct()
+        all_users_in_kb = self.get_users_to_sync()
 
         for user_in_geoserver in all_users_in_geoserver:
             user_exists_in_kb = any(user_in_geoserver['userName'] == user_in_kb.email for user_in_kb in all_users_in_kb)
@@ -711,12 +723,10 @@ class GeoServerPool(mixins.RevisionedMixin):
         """
         log.info(f'Synchronize users-groups and users-roles in the geoserver: [{self}]...')
 
-        # Retrieve only users associated with active roles or groups
-        users = UserModel.objects.filter(
-            Q(geoserverroleuser__geoserver_role__active=True) |
-            Q(geoservergroupuser__geoserver_group__active=True)).distinct().order_by('id')
+        # Retrieve only users who get at least one active role
+        users = self.get_users_to_sync()
 
-        log.info(f'Users associated with active GeoServerRole or GeoServerGroup: [{users}]')
+        log.info(f'Users who get an active GeoServerRole directly or through a GeoServerGroup: [{users}]')
 
         # Sync all the groups
         self.sync_groups()
