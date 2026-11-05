@@ -22,6 +22,14 @@ from govapp.common.utils import calculate_dict_differences, generate_random_pass
 log = logging.getLogger(__name__)
 UserModel = get_user_model()
 
+# Stop the user sync early when GeoServer rejects every write (e.g. a stale lock file),
+# instead of logging one error per user on every run.
+MAX_CONSECUTIVE_USER_SYNC_FAILURES = 10
+
+# Each write to a user/group service makes GeoServer save and reload the whole user file,
+# which takes many seconds when it holds thousands of users. The httpx default is 5 seconds.
+GEOSERVER_USERGROUP_WRITE_TIMEOUT_SECONDS = 60
+
 
 def encode(s):
     # s = urllib.parsquote(s, safe='')
@@ -292,7 +300,8 @@ class GeoServerPool(mixins.RevisionedMixin):
             url=url,
             headers=self.headers_json,
             content=json.dumps(user_data),
-            auth=self.auth
+            auth=self.auth,
+            timeout=GEOSERVER_USERGROUP_WRITE_TIMEOUT_SECONDS
         )
         response.raise_for_status()
         log.info(f"User: [{user_data['user']['userName']}] has been updated successfully in GeoServer: [{self}].")
@@ -305,7 +314,8 @@ class GeoServerPool(mixins.RevisionedMixin):
             url=url,
             headers=self.headers_json,
             content=json.dumps(user_data),
-            auth=self.auth
+            auth=self.auth,
+            timeout=GEOSERVER_USERGROUP_WRITE_TIMEOUT_SECONDS
         )
         response.raise_for_status()
         log.info(f"User: [{user_data['user']['userName']}] has been created successfully in the GeoServer: [{self}].")
@@ -321,7 +331,8 @@ class GeoServerPool(mixins.RevisionedMixin):
         url = f"{self.base_url_security}/usergroup/service/{encode(service_name)}/user/{encode(username)}.json" if service_name else f"{self.base_url_security}/usergroup/user/{encode(username)}.json"
         response = httpx.delete(
             url=url,
-            auth=self.auth
+            auth=self.auth,
+            timeout=GEOSERVER_USERGROUP_WRITE_TIMEOUT_SECONDS
         )
         response.raise_for_status()
         log.info(f"User: [{username}] has been deleted successfully from the GeoServer: [{self}].")
@@ -370,8 +381,10 @@ class GeoServerPool(mixins.RevisionedMixin):
         url = f"{self.base_url_security}/usergroup/service/{encode(service_name)}/group/{encode(group_name)}.json" if service_name else f"{self.base_url_security}/usergroup/group/{encode(group_name)}.json"
         response = httpx.post(
             url=url,
-            auth=self.auth
+            auth=self.auth,
+            timeout=GEOSERVER_USERGROUP_WRITE_TIMEOUT_SECONDS
         )
+        response.raise_for_status()
         log.info(f"Group: [{group_name}] has been created successfully in the GeoServer: [{self}].")
         return response
 
@@ -385,7 +398,8 @@ class GeoServerPool(mixins.RevisionedMixin):
         url = f"{self.base_url_security}/usergroup/service/{encode(service_name)}/group/{encode(group_name)}.json" if service_name else f"{self.base_url_security}/usergroup/group/{encode(group_name)}.json"
         response = httpx.delete(
             url=url,
-            auth=self.auth
+            auth=self.auth,
+            timeout=GEOSERVER_USERGROUP_WRITE_TIMEOUT_SECONDS
         )
         response.raise_for_status()
         log.info(f"Group: [{group_name}] has been deleted successfully from the GeoServer: [{self}].")
@@ -398,7 +412,8 @@ class GeoServerPool(mixins.RevisionedMixin):
         url = f"{self.base_url_security}/usergroup/service/{encode(service_name)}/user/{encode(username)}/group/{encode(group_name)}.json" if service_name else f"{self.base_url_security}/usergroup/user/{encode(username)}/group/{encode(group_name)}.json"
         response = httpx.post(
             url=url,
-            auth=self.auth
+            auth=self.auth,
+            timeout=GEOSERVER_USERGROUP_WRITE_TIMEOUT_SECONDS
         )
         response.raise_for_status()
         log.info(f"User: [{username}] has been successfully associated with the group: [{group_name}] in the GeoServer: [{self}].")
@@ -411,7 +426,8 @@ class GeoServerPool(mixins.RevisionedMixin):
         url = f"{self.base_url_security}/usergroup/service/{encode(service_name)}/user/{encode(username)}/group/{encode(group_name)}.json" if service_name else f"{self.base_url_security}/usergroup/user/{encode(username)}/group/{encode(group_name)}.json"
         response = httpx.delete(
             url=url,
-            auth=self.auth
+            auth=self.auth,
+            timeout=GEOSERVER_USERGROUP_WRITE_TIMEOUT_SECONDS
         )
         response.raise_for_status()
         log.info(f"User: [{username}] has been successfully unassociated from the group: [{group_name}] in the GeoServer: [{self}].")
@@ -519,18 +535,30 @@ class GeoServerPool(mixins.RevisionedMixin):
         log.info(f"Role: [{role_name}] has been disassociated successfully from the group: [{group_name}] in the GeoServer: [{self}].")
         return response
 
+    @staticmethod
+    def get_users_to_sync():
+        """Return the users to sync with GeoServer.
+
+        Only users who get at least one active role, directly or through an active group, are
+        synced. Members of groups without roles (e.g. DBCA_Users, which holds all staff) are
+        skipped: they would get nothing in GeoServer, and saving thousands of users makes
+        GeoServer very slow.
+        """
+        groups_with_roles = GeoServerGroup.objects.filter(active=True, geoserver_roles__active=True)
+        return UserModel.objects.filter(
+            Q(geoserverroleuser__geoserver_role__active=True) |
+            Q(geoservergroupuser__geoserver_group__in=groups_with_roles)).distinct().order_by('id')
+
     def cleanup_users(self):
         log.info(f'Cleaning up users in the geoserver: [{self}]...')
 
         all_users_in_geoserver = self.get_all_users(settings.GEOSERVER_USERGROUP_SERVICE_NAME_CUSTOM)
-        all_users_in_kb = UserModel.objects.filter(
-            Q(geoserverroleuser__geoserver_role__active=True) |
-            Q(geoservergroupuser__geoserver_group__active=True)).distinct()
+        all_users_in_kb = self.get_users_to_sync()
 
         for user_in_geoserver in all_users_in_geoserver:
             user_exists_in_kb = any(user_in_geoserver['userName'] == user_in_kb.email for user_in_kb in all_users_in_kb)
 
-            if not user_exists_in_kb and user_exists_in_kb not in settings.NON_DELETABLE_USERS:
+            if not user_exists_in_kb and user_in_geoserver['userName'] not in settings.NON_DELETABLE_USERS:
                 log.info(f'User: [{user_in_geoserver}] exists in the geoserver: [{self}], but not in KB.')
                 self.delete_existing_user(user_in_geoserver['userName'], settings.GEOSERVER_USERGROUP_SERVICE_NAME_CUSTOM)
 
@@ -656,40 +684,49 @@ class GeoServerPool(mixins.RevisionedMixin):
                 self.associate_role_with_user(user.email, role_in_kb.name)
         return roles_for_user_in_kb
 
-    def create_or_update_user(self, user):
-        """Create or update a user in GeoServer."""
-        user_data = {
-            "user": {
-                "userName": user.email,
-                "password": generate_random_password(50),
-                "enabled": user.is_active
-            }
-        }
+    def create_or_update_user(self, user, existing_users):
+        """Create a user in GeoServer, or update it only when its enabled state has changed.
 
-        # Check if user already exists
-        existing_users = self.get_all_users(settings.GEOSERVER_USERGROUP_SERVICE_NAME_CUSTOM)
-        user_exists = any(user_in_geoserver['userName'] == user_data['user']['userName'] for user_in_geoserver in existing_users)
+        existing_users maps user names to the users in GeoServer, and is kept up to date here.
+        """
+        existing_user = existing_users.get(user.email)
 
-        # Create/Update user
-        if user_exists:
-            log.info(f'User: [{user.email}] exists in the geoserver: [{self}]')
-            response = self.update_existing_user(user_data, settings.GEOSERVER_USERGROUP_SERVICE_NAME_CUSTOM)
-        else:
+        if existing_user is None:
             log.info(f'User: [{user.email}] does not exist in the geoserver: [{self}]')
-            response = self.create_new_user(user_data, settings.GEOSERVER_USERGROUP_SERVICE_NAME_CUSTOM)
-
-        response.raise_for_status()
+            user_data = {
+                "user": {
+                    "userName": user.email,
+                    "password": generate_random_password(50),
+                    "enabled": user.is_active
+                }
+            }
+            self.create_new_user(user_data, settings.GEOSERVER_USERGROUP_SERVICE_NAME_CUSTOM)
+            existing_users[user.email] = {"userName": user.email, "enabled": user.is_active}
+        elif existing_user.get('enabled') != user.is_active:
+            log.info(f'User: [{user.email}] exists in the geoserver: [{self}], but its enabled state has changed.')
+            user_data = {
+                "user": {
+                    "userName": user.email,
+                    "enabled": user.is_active
+                }
+            }
+            self.update_existing_user(user_data, settings.GEOSERVER_USERGROUP_SERVICE_NAME_CUSTOM)
+            existing_user['enabled'] = user.is_active
+        else:
+            log.info(f'User: [{user.email}] exists in the geoserver: [{self}], and is up to date.')
 
     def sync_users_groups_users_roles(self):
-        """Synchronize users-groups and users-roles with GeoServer."""
+        """Synchronize users-groups and users-roles with GeoServer.
+
+        A user that fails is logged and skipped, so the other users are still synced.
+        Returns the IDs of the users that failed.
+        """
         log.info(f'Synchronize users-groups and users-roles in the geoserver: [{self}]...')
 
-        # Retrieve only users associated with active roles or groups
-        users = UserModel.objects.filter(
-            Q(geoserverroleuser__geoserver_role__active=True) |
-            Q(geoservergroupuser__geoserver_group__active=True)).distinct()
+        # Retrieve only users who get at least one active role
+        users = self.get_users_to_sync()
 
-        log.info(f'Users associated with active GeoServerRole or GeoServerGroup: [{users}]')
+        log.info(f'Users who get an active GeoServerRole directly or through a GeoServerGroup: [{users}]')
 
         # Sync all the groups
         self.sync_groups()
@@ -697,19 +734,39 @@ class GeoServerPool(mixins.RevisionedMixin):
         # Sync all the roles
         self.sync_roles()
 
+        existing_users = {
+            user_in_geoserver['userName']: user_in_geoserver
+            for user_in_geoserver in self.get_all_users(settings.GEOSERVER_USERGROUP_SERVICE_NAME_CUSTOM)
+        }
+
+        failed_user_ids = []
+        consecutive_failures = 0
         for user in users:
             if not user.email:
                 log.warning(f'User: [ID: {user.id}, username: {user.username}, first_name: {user.first_name}, last_name: {user.last_name}] does not have email address.  Skip the geoserver process for this user.')
                 continue
-            self.create_or_update_user(user)
 
-            # Sync relations between users and groups
-            groups_for_user_in_kb = self.associate_user_with_groups(user)
-            self.disassociate_user_from_groups(user, groups_for_user_in_kb)
+            try:
+                self.create_or_update_user(user, existing_users)
 
-            # Sync relations between users and roles
-            roles_for_user_in_kb = self.associate_user_with_roles(user)
-            self.disassociate_user_from_roles(user, roles_for_user_in_kb)
+                # Sync relations between users and groups
+                groups_for_user_in_kb = self.associate_user_with_groups(user)
+                self.disassociate_user_from_groups(user, groups_for_user_in_kb)
+
+                # Sync relations between users and roles
+                roles_for_user_in_kb = self.associate_user_with_roles(user)
+                self.disassociate_user_from_roles(user, roles_for_user_in_kb)
+            except httpx.HTTPError as e:
+                failed_user_ids.append(user.id)
+                consecutive_failures += 1
+                log.error(f'Failed to sync the user: [ID: {user.id}] to the geoserver: [{self}]: {e}')
+                if consecutive_failures >= MAX_CONSECUTIVE_USER_SYNC_FAILURES:
+                    log.error(f'Stopping the user sync for the geoserver: [{self}] after {consecutive_failures} consecutive failures.')
+                    break
+            else:
+                consecutive_failures = 0
+
+        return failed_user_ids
 
     def sync_relations_groups_roles(self, group_in_kb):
         # Associate group with roles
