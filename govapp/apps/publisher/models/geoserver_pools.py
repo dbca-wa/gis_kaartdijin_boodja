@@ -12,6 +12,7 @@ import httpx
 import json
 import urllib
 import copy
+import xml.etree.ElementTree as ET
 
 # Local
 from govapp import settings
@@ -575,6 +576,38 @@ class GeoServerPool(mixins.RevisionedMixin):
         return UserModel.objects.filter(
             Q(geoserverroleuser__geoserver_role__active=True) |
             Q(geoservergroupuser__geoserver_group__in=groups_with_roles)).distinct().order_by('id')
+
+    @staticmethod
+    def build_usergroup_file():
+        """Return the content of the GeoServer user file (users.xml format) built from KB data.
+
+        Users: everyone with an email address who is in an active group or has an active role,
+        without a password (users log in through SSO). Groups: every active group with its members.
+        Everything is sorted, so the same data always gives the same bytes.
+        """
+        users = {}
+        for user in UserModel.objects.filter(
+                Q(geoservergroupuser__geoserver_group__active=True) |
+                Q(geoserverroleuser__geoserver_role__active=True)).exclude(email__isnull=True).exclude(email='').distinct():
+            # Two KB users can share an email address: enable the GeoServer user if either is active
+            users[user.email] = users.get(user.email, False) or user.is_active
+
+        members = {}
+        for group_user in GeoServerGroupUser.objects.filter(geoserver_group__active=True).exclude(user__email__isnull=True).exclude(user__email=''):
+            members.setdefault(group_user.geoserver_group.name, set()).add(group_user.user.email)
+
+        root = ET.Element('userRegistry', {'xmlns': 'http://www.geoserver.org/security/users', 'version': '1.0'})
+        users_element = ET.SubElement(root, 'users')
+        for email in sorted(users):
+            ET.SubElement(users_element, 'user', {'enabled': 'true' if users[email] else 'false', 'name': email})
+        groups_element = ET.SubElement(root, 'groups')
+        for group_name in sorted(GeoServerGroup.objects.filter(active=True).values_list('name', flat=True)):
+            group_element = ET.SubElement(groups_element, 'group', {'enabled': 'true', 'name': group_name})
+            for email in sorted(members.get(group_name, ())):
+                ET.SubElement(group_element, 'member', {'username': email})
+
+        log.info(f'User file built: [{len(users)}] user(s), [{len(groups_element)}] group(s).')
+        return ET.tostring(root, encoding='utf-8', xml_declaration=True)
 
     def cleanup_users(self):
         log.info(f'Cleaning up users in the geoserver: [{self}]...')
