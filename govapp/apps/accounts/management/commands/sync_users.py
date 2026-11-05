@@ -13,13 +13,13 @@ class Command(BaseCommand):
             geoserver.sync_usergroup_file()
 
             # Sync relations between users and roles
-            failed_user_ids = geoserver.sync_user_roles()
+            failed_usernames = geoserver.sync_user_roles()
 
             # Sync relations between roles with grous ###
             geoserver.sync_groups_roles()
 
-            if failed_user_ids:
-                errors.append(f'{geoserver}: {len(failed_user_ids)} user(s) failed')
+            if failed_usernames:
+                errors.append(f'{geoserver}: the roles of {len(failed_usernames)} user(s) failed')
 
         # Fail the command, so the cron job log records the failure
         if errors:
