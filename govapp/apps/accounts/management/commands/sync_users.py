@@ -9,14 +9,14 @@ class Command(BaseCommand):
         errors = []
         geoservers = GeoServerPool.enabled_targets()
         for geoserver in geoservers:
-            # Sync relations between users and groups, and users and roles
-            failed_user_ids = geoserver.sync_users_groups_users_roles()
+            # Write the users and groups to the GeoServer user file
+            geoserver.sync_usergroup_file()
+
+            # Sync relations between users and roles
+            failed_user_ids = geoserver.sync_user_roles()
 
             # Sync relations between roles with grous ###
             geoserver.sync_groups_roles()
-
-            # Cleanup users
-            geoserver.cleanup_users()
 
             if failed_user_ids:
                 errors.append(f'{geoserver}: {len(failed_user_ids)} user(s) failed')
