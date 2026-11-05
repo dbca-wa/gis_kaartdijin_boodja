@@ -280,6 +280,33 @@ class GeoServerPool(mixins.RevisionedMixin):
         log.info(f'Successfully deleted ACL rule: key=[{key}] from the geoserver: [{self}].')
         return {}
 
+    ### Resource (files in the GeoServer data directory)
+    @handle_http_exceptions(log)
+    def get_resource(self, path):
+        """Read a file in the GeoServer data directory, e.g. 'security/usergroup/dbca/config.xml'."""
+        self.check_variable(path, 'Resource path')
+        response = httpx.get(
+            url=f"{self.url}/rest/resource/{encode(path)}",
+            auth=self.auth
+        )
+        response.raise_for_status()
+        return response.content
+
+    @handle_http_exceptions(log)
+    def put_resource(self, path, content, content_type='application/xml'):
+        """Write a file in the GeoServer data directory in one request, replacing the old one."""
+        self.check_variable(path, 'Resource path')
+        response = httpx.put(
+            url=f"{self.url}/rest/resource/{encode(path)}",
+            headers={"Content-Type": content_type},
+            content=content,
+            auth=self.auth,
+            timeout=GEOSERVER_USERGROUP_WRITE_TIMEOUT_SECONDS
+        )
+        response.raise_for_status()
+        log.info(f"Resource: [{path}] has been written successfully in the GeoServer: [{self}].")
+        return response
+
     ### User
     @handle_http_exceptions(log)
     def get_all_users(self, service_name=''):
