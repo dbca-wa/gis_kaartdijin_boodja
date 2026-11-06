@@ -279,13 +279,18 @@ class GeoServerPool(mixins.RevisionedMixin):
 
     ### Resource (files in the GeoServer data directory)
     @handle_http_exceptions(log)
-    def get_resource(self, path):
-        """Read a file in the GeoServer data directory, e.g. 'security/usergroup/dbca/config.xml'."""
+    def get_resource(self, path, missing_ok=False):
+        """Read a file in the GeoServer data directory, e.g. 'security/usergroup/dbca/config.xml'.
+
+        With missing_ok, return None instead of raising when the file does not exist.
+        """
         self.check_variable(path, 'Resource path')
         response = httpx.get(
             url=f"{self.url}/rest/resource/{encode(path)}",
             auth=self.auth
         )
+        if missing_ok and response.status_code == 404:
+            return None
         response.raise_for_status()
         return response.content
 
@@ -625,7 +630,8 @@ class GeoServerPool(mixins.RevisionedMixin):
 
         path = f'security/usergroup/{service_name}/{file_name}'
         content = self.build_usergroup_file()
-        if self.get_resource(path) == content:
+        # A service created in the GeoServer UI has no user file until something is saved
+        if self.get_resource(path, missing_ok=True) == content:
             log.info(f'User file: [{path}] in the geoserver: [{self}] is up to date.')
             return False
 
