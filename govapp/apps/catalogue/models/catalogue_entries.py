@@ -12,6 +12,8 @@ from django.contrib import auth
 from django.contrib.auth import models as auth_models
 from django.db import models
 from django.core.exceptions import ObjectDoesNotExist
+from drf_spectacular import types as drf_types
+from drf_spectacular import utils as drf_utils
 from rest_framework import request
 
 
@@ -221,7 +223,10 @@ class CatalogueEntry(mixins.RevisionedMixin):
         latest_submission = LayerSubmission.objects.filter(catalogue_entry=self).last()
         return os.path.splitext(latest_submission.file)[-1] if latest_submission else ''
 
+    # The return type hint below cannot be resolved at runtime (layer_submissions is only
+    # imported for type checking), so give the API schema generator the type directly.
     @property
+    @drf_utils.extend_schema_field(drf_types.OpenApiTypes.INT)
     def active_layer(self) -> "layer_submissions.LayerSubmission":
         """Retrieves the currently active layer.
 
