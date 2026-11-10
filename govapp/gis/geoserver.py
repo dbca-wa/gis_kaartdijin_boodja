@@ -1527,9 +1527,11 @@ class GeoServer:
                 log.info(f"Coverage [{coverage_name}] deleted successfully.")
 
                 # Raster stores are always 1:1 with a file — delete the store too.
+                # The ".json" suffix makes GeoServer read the whole store name, even when
+                # the name itself ends with a file extension such as ".tif".
                 store_delete_url = (
                     f"{self.service_url}/rest/workspaces/{workspace_name}"
-                    f"/coveragestores/{store_name}?recurse=true"
+                    f"/coveragestores/{store_name}.json?recurse=true"
                 )
                 log.info(f"Deleting coveragestore [{store_name}]...")
                 response = httpx.delete(
