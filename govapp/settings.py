@@ -330,22 +330,22 @@ ALLOWED_GROUPS_TO_VIEW_LOGFILE = [
 # https://django-cron.readthedocs.io/en/latest/installation.html
 # https://django-cron.readthedocs.io/en/latest/configuration.html
 #CRON_SCANNER_CLASS = "govapp.apps.catalogue.cron.ScannerCronJob"
-POSTGRES_SCANNER_PERIOD_MINS = decouple.config('POSTGRES_SCANNER_PERIOD_MINS', default=2)
-SHAREPOINT_SCANNER_PERIOD_MINS = decouple.config('SHAREPOINT_SCANNER_PERIOD_MINS', default=2)
-DIRECTORY_SCANNER_PERIOD_MINS = decouple.config('DIRECTORY_SCANNER_PERIOD_MINS', default=2)
-PUBLISH_GEOSERVER_QUEUE_PERIOD_MINS = decouple.config('PUBLISH_GEOSERVER_QUEUE_PERIOD_MINS', default=2)
+POSTGRES_SCANNER_PERIOD_MINS = decouple.config('POSTGRES_SCANNER_PERIOD_MINS', default=2, cast=int)
+SHAREPOINT_SCANNER_PERIOD_MINS = decouple.config('SHAREPOINT_SCANNER_PERIOD_MINS', default=2, cast=int)
+DIRECTORY_SCANNER_PERIOD_MINS = decouple.config('DIRECTORY_SCANNER_PERIOD_MINS', default=2, cast=int)
+PUBLISH_GEOSERVER_QUEUE_PERIOD_MINS = decouple.config('PUBLISH_GEOSERVER_QUEUE_PERIOD_MINS', default=2, cast=int)
 GEOSERVER_LAYER_HEALTH_CHECK_TIMES = decouple.config(
     'GEOSERVER_LAYER_HEALTH_CHECK_TIMES',
     default='08:00,11:00,14:00,16:00',  # Perth time, ~4x/day
     cast=lambda v: [t.strip() for t in v.split(',')]
 )
 # .env example: GEOSERVER_LAYER_HEALTH_CHECK_TIMES=08:00,11:00,14:00,16:00
-GEOSERVER_SYNC_LAYERS_PERIOD_MINS = decouple.config('GEOSERVER_SYNC_LAYERS_PERIOD_MINS', default=1)
-GEOSERVER_SYNC_RULES_PERIOD_MINS = decouple.config('GEOSERVER_SYNC_RULES_PERIOD_MINS', default=2)
-GEOSERVER_SYNC_USERS_PERIOD_MINS = decouple.config('GEOSERVER_SYNC_USERS_PERIOD_MINS', default=2)
-SYNC_ITASSETS_USERS_PERIOD_MINS = decouple.config('SYNC_ITASSETS_USERS_PERIOD_MINS', default=2)
-PENDING_IMPORT_STALE_THRESHOLD_DAYS = decouple.config('PENDING_IMPORT_STALE_THRESHOLD_DAYS', default=2)
-PENDING_IMPORTS_CLEANUP_PERIOD_MINS = decouple.config('PENDING_IMPORTS_CLEANUP_PERIOD_MINS', default=60)
+GEOSERVER_SYNC_LAYERS_PERIOD_MINS = decouple.config('GEOSERVER_SYNC_LAYERS_PERIOD_MINS', default=1, cast=int)
+GEOSERVER_SYNC_RULES_PERIOD_MINS = decouple.config('GEOSERVER_SYNC_RULES_PERIOD_MINS', default=2, cast=int)
+GEOSERVER_SYNC_USERS_PERIOD_MINS = decouple.config('GEOSERVER_SYNC_USERS_PERIOD_MINS', default=2, cast=int)
+SYNC_ITASSETS_USERS_PERIOD_MINS = decouple.config('SYNC_ITASSETS_USERS_PERIOD_MINS', default=2, cast=int)
+PENDING_IMPORT_STALE_THRESHOLD_DAYS = decouple.config('PENDING_IMPORT_STALE_THRESHOLD_DAYS', default=2, cast=int)
+PENDING_IMPORTS_CLEANUP_PERIOD_MINS = decouple.config('PENDING_IMPORTS_CLEANUP_PERIOD_MINS', default=60, cast=int)
 # Lock timeout for django-cron in seconds. The CacheLock backend uses this value as a cache key
 # TTL (seconds), not minutes. Set to 86400s (24h) so that if a Pod restart kills a running job
 # mid-execution, the stale lock expires within 24h and the job can run again automatically.
