@@ -551,6 +551,7 @@ class GeoServerQueueExcutor:
                         layer=layer_name,
                         file_path_on_volume=volume_file_path,
                         geoserver_data_dir=geoserver_data_dir,
+                        declared_srs=(channel.srs or "").strip().upper() or None,
                     )
                 else:
                     self.result_status = GeoServerQueueStatus.PUBLISH_FAILED
