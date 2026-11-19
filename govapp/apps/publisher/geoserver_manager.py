@@ -129,7 +129,7 @@ class GeoServerQueueExcutor:
                             workspaces_in_kb = Workspace.objects.all()
                             for workspace in workspaces_in_kb:
                                 geoserver_pool.create_workspace_if_not_exists(workspace.name)
-                            self._publish_to_a_geoserver(geoserver_publish_channel)
+                            self._publish_to_a_geoserver(geoserver_publish_channel, symbology_only=True)
                     else:
                         catalogue_entry_type = queue_item.publish_entry.catalogue_entry.type
                         if catalogue_entry_type in [CatalogueEntryType.SPATIAL_FILE, CatalogueEntryType.SUBSCRIPTION_QUERY]:
@@ -211,9 +211,9 @@ class GeoServerQueueExcutor:
         geoserver_publish_channel.geoserver_pool = target
         return target
     
-    def _publish_to_a_geoserver(self, geoserver_publish_channel: GeoServerPublishChannel):
+    def _publish_to_a_geoserver(self, geoserver_publish_channel: GeoServerPublishChannel, symbology_only: bool = False):
         # Publish here
-        res, exc = geoserver_publisher.publish(geoserver_publish_channel)
+        res, exc = geoserver_publisher.publish(geoserver_publish_channel, symbology_only=symbology_only)
         
         if res:
             self._add_publishing_log(f"[{geoserver_publish_channel.publish_entry.name} - {geoserver_publish_channel.geoserver_pool.url}] Publishing succeed.")
