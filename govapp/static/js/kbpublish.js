@@ -945,7 +945,7 @@ var kbpublish = {
         let expireServerCacheInSeconds = $('#expire-server-cache-after-n-seconds').val();
         let expireClientCacheInSeconds = $('#expire-client-cache-after-n-seconds').val();
         let gpkgMemoryMapSize = $('#new-publish-gpkg-memory-map-size').val();
-        let geotiffSrs = $('#new-publish-srs-geotiff').val().trim();
+        let geotiffSrs = $('#new-publish-srs-geotiff').val().replace(/\s+/g, '');  // e.g. 'EPSG: 3577' -> 'EPSG:3577'
 
         // Validate data
         if (newpublishgeoserverpool.length < 1) {
