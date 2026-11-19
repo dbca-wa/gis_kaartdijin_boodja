@@ -101,6 +101,20 @@
                                    </div>
                               </div>
                          </div>
+                         <div class='row align-items-center mb-3' id="geotiff-srs-row" style="display: none;">
+                              <div class='col-4 text-end'>
+                              </div>
+                              <div class='col-8'>
+                                   <div class='row mb-3'>
+                                        <div class='col-7'>
+                                             <label for="new-publish-srs-geotiff" class="form-label mb-0">SRS<br><span class="form-text">(Optional. Leave blank to use the CRS in the file. Required if GeoServer cannot identify the CRS of the file. If the file has a different CRS, the layer is reprojected to this SRS.)</span></label>
+                                        </div>
+                                        <div class='col-4'>
+                                             <input type="text" class="form-control" id="new-publish-srs-geotiff" placeholder="e.g., EPSG:3577">
+                                        </div>
+                                   </div>
+                              </div>
+                         </div>
                          <div class='row align-items-center mb-3'>
                               <div class='col-4 text-end'>
                                    <label for="" class="form-label mb-0">Active</label>

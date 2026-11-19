@@ -661,6 +661,7 @@ class GeoServer:
         layer: str,
         file_path_on_volume: pathlib.Path,
         geoserver_data_dir: Optional[pathlib.Path] = None,
+        declared_srs: Optional[str] = None,
     ) -> None:
         """Configures a GeoTIFF coveragestore in GeoServer using a file already present on the
         shared Docker volume (no HTTP file upload).
@@ -677,6 +678,13 @@ class GeoServer:
             geoserver_data_dir: GeoServer data directory root. When provided and the file
                 is under this directory, uses ``file:data/<relative>`` URL format to bypass
                 the GeoServer 2.23+ filesystem sandbox canonical-path check on SMB mounts.
+            declared_srs: SRS set on the publish channel (e.g. 'EPSG:3577'). Works like
+                Declared SRS in GeoServer: if GeoServer cannot identify the CRS of the
+                file, this value is declared as its CRS ("Force declared"); if GeoServer
+                identifies a different CRS, the layer is reprojected to this value
+                ("Reproject native to declared"). If GeoServer cannot identify the CRS and
+                no value is given, the layer and store are removed and an error is raised,
+                because a layer without a CRS breaks the WMS GetCapabilities document.
         """
         log.info(
             f"Configuring GeoTIFF store '{layer}' in workspace '{workspace}' "
@@ -800,6 +808,53 @@ class GeoServer:
                 raise requests.HTTPError(
                     f"{resp_coverage.status_code} {resp_coverage.reason} at {coverage_url}: {resp_coverage.text}",
                     response=resp_coverage,
+                )
+
+            # Step 3: apply the declared SRS. GeoServer leaves "srs" empty when it cannot
+            # identify the CRS of the file (e.g. a WKT without an EPSG code).
+            resource_url = (
+                f"{self.service_url}/rest/workspaces/{workspace}"
+                f"/coveragestores/{layer}/coverages/{layer}.json"
+            )
+            resp_resource = session.get(resource_url, timeout=(15, 60.0))
+            resp_resource.raise_for_status()
+            native_srs = resp_resource.json().get("coverage", {}).get("srs")
+
+            if not native_srs and not declared_srs:
+                log.error(
+                    f"GeoServer cannot identify the CRS of GeoTIFF '{layer}' and no SRS is set "
+                    f"on the publish entry. Removing the layer and coverage store."
+                )
+                session.delete(layer_delete_url, timeout=(15, 120))
+                session.delete(store_delete_url, timeout=(15, 120))
+                raise ValueError(
+                    f"GeoServer cannot identify the CRS of GeoTIFF '{layer}'. Set the SRS on the "
+                    f"GeoServer publish entry or fix the CRS in the file."
+                )
+
+            if not declared_srs or declared_srs.upper() == (native_srs or "").upper():
+                return
+
+            if native_srs:
+                projection_policy = "REPROJECT_TO_DECLARED"
+                log.info(f"Reprojecting GeoTIFF '{layer}' from '{native_srs}' to '{declared_srs}'.")
+            else:
+                projection_policy = "FORCE_DECLARED"
+                log.warning(
+                    f"GeoServer cannot identify the CRS of GeoTIFF '{layer}'. "
+                    f"Declaring '{declared_srs}' (Force declared)."
+                )
+            resp_srs = session.put(
+                url=resource_url,
+                params={"recalculate": "nativebbox,latlonbbox"},
+                json={"coverage": {"srs": declared_srs, "projectionPolicy": projection_policy}},
+                timeout=(15, 3000.0),
+            )
+            log.info(f"Declared SRS response: '{resp_srs.status_code}: {resp_srs.text}'")
+            if not resp_srs.ok:
+                raise requests.HTTPError(
+                    f"{resp_srs.status_code} {resp_srs.reason} at {resource_url}: {resp_srs.text}",
+                    response=resp_srs,
                 )
 
     @handle_http_exceptions(log)

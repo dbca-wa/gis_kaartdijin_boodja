@@ -281,6 +281,19 @@ var kbpublish = {
             memoryMapRow.slideUp(); // Hide the field
         }
     },
+    // A function to toggle the visibility of the SRS field (GeoTiff only)
+    toggleGeotiffSrsField: function() {
+        const storeTypeSelect = $('#new-publish-store-type');
+        const srsRow = $('#geotiff-srs-row');
+
+        const GEOTIFF_VALUE = '2'; // Check class StoreType
+
+        if (storeTypeSelect.val() === GEOTIFF_VALUE) {
+            srsRow.slideDown();
+        } else {
+            srsRow.slideUp();
+        }
+    },
     init_publish_item: function() {    
         kbpublish.var.expire_server_cache_after_n_seconds_default = $('#expire_server_cache_after_n_seconds_default').val()
         kbpublish.var.expire_client_cache_after_n_seconds_default = $('#expire_client_cache_after_n_seconds_default').val()
@@ -481,8 +494,10 @@ var kbpublish = {
         
         // Bind the function to the 'change' event of the store type dropdown
         $('#new-publish-store-type').on('change', kbpublish.toggleMemoryMapField);
+        $('#new-publish-store-type').on('change', kbpublish.toggleGeotiffSrsField);
         // Call the function once on page load to set the initial state
         kbpublish.toggleMemoryMapField();
+        kbpublish.toggleGeotiffSrsField();
     },
     retrieve_noti_types: function(post_callback){
         $.ajax({
@@ -930,6 +945,7 @@ var kbpublish = {
         let expireServerCacheInSeconds = $('#expire-server-cache-after-n-seconds').val();
         let expireClientCacheInSeconds = $('#expire-client-cache-after-n-seconds').val();
         let gpkgMemoryMapSize = $('#new-publish-gpkg-memory-map-size').val();
+        let geotiffSrs = $('#new-publish-srs-geotiff').val().replace(/\s+/g, '');  // e.g. 'EPSG: 3577' -> 'EPSG:3577'
 
         // Validate data
         if (newpublishgeoserverpool.length < 1) {
@@ -950,6 +966,10 @@ var kbpublish = {
         }
         if (newpublishstoretype.length < 1) {
             error_msg_elem.html("Please choose a store type.").show();
+            return false;
+        }
+        if (geotiffSrs && !/^EPSG:\d+$/i.test(geotiffSrs)) {
+            error_msg_elem.html("Please enter the SRS as an EPSG code, e.g. EPSG:3577.").show();
             return false;
         }
         if (newpublishCreateCachedLayer){
@@ -976,7 +996,8 @@ var kbpublish = {
             "create_cached_layer": newpublishCreateCachedLayer,
             "expire_server_cache_after_n_seconds": expireServerCacheInSeconds,
             "expire_client_cache_after_n_seconds": expireClientCacheInSeconds,
-            "gpkg_memory_map_size": gpkgMemoryMapSize === '' ? null : gpkgMemoryMapSize
+            "gpkg_memory_map_size": gpkgMemoryMapSize === '' ? null : gpkgMemoryMapSize,
+            "srs": (newpublishstoretype === '2' && geotiffSrs) ? geotiffSrs.toUpperCase() : null  // GeoTiff only (class StoreType)
         };
 
         let csrf_token = $("#csrfmiddlewaretoken").val();
@@ -1874,7 +1895,7 @@ var kbpublish = {
     },
     show_publish_geoserver_create_or_update_modal: function(geoserver_publish_channel_obj){
         console.log('in show_publish_geoserver_create_or_update_modal')
-        let PUBLISH_STORE_TYPE_GEOTIFF = 1
+        let PUBLISH_STORE_TYPE_GEOPACKAGE = 1
 
         if (geoserver_publish_channel_obj){ // Update existing
             $('#new-update-geoserver-modal-title').text('Update Geoserver Publish Entry');
@@ -1890,6 +1911,7 @@ var kbpublish = {
             $('#expire-server-cache-after-n-seconds').removeAttr('disabled').val(geoserver_publish_channel_obj.expire_server_cache_after_n_seconds);
             $('#expire-client-cache-after-n-seconds').removeAttr('disabled').val(geoserver_publish_channel_obj.expire_client_cache_after_n_seconds);
             $('#new-publish-gpkg-memory-map-size').removeAttr('disabled').val(geoserver_publish_channel_obj.gpkg_memory_map_size);
+            $('#new-publish-srs-geotiff').val(geoserver_publish_channel_obj.srs || '');
         } else { // Create new
             $('#new-update-geoserver-modal-title').text('Create New Geoserver Publish Entry');
             $('#create-update-publish-geoserver-btn').text('Create');
@@ -1898,12 +1920,13 @@ var kbpublish = {
             $('#new-publish-spatial-format').removeAttr('disabled').val('');
             $('#new-publish-frequency-type').removeAttr('disabled').val('');
             $('#new-publish-workspace').removeAttr('disabled').val('');
-            $('#new-publish-store-type').removeAttr('disabled').val(PUBLISH_STORE_TYPE_GEOTIFF);  
+            $('#new-publish-store-type').removeAttr('disabled').val(PUBLISH_STORE_TYPE_GEOPACKAGE);  
             $('#new-publish-active').removeAttr('disabled').prop('checked', true);
             $('#new-publish-create-cached-layer').removeAttr('disabled').prop('checked', true);
             $('#expire-server-cache-after-n-seconds').removeAttr('disabled').val(kbpublish.var.expire_server_cache_after_n_seconds_default);
             $('#expire-client-cache-after-n-seconds').removeAttr('disabled').val(kbpublish.var.expire_client_cache_after_n_seconds_default);
             $('#new-publish-gpkg-memory-map-size').removeAttr('disabled').val('');
+            $('#new-publish-srs-geotiff').val('');
         }
         // Remove success/error message
         $('#new-publish-new-geoserver-popup-error').html('').hide();
@@ -1911,6 +1934,7 @@ var kbpublish = {
 
         kbpublish.toggleOtherOptions();
         kbpublish.toggleMemoryMapField();
+        kbpublish.toggleGeotiffSrsField();
 
         // Show modal
         $('#PublishGeoserverCreateOrUpdateModal').modal('show');

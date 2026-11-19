@@ -111,6 +111,7 @@
                         {% endif %}
                   </div>
             </div>
+            {% if catalogue_entry_obj.type == CatalogueEntryType.SPATIAL_FILE.value or catalogue_entry_obj.type == CatalogueEntryType.SUBSCRIPTION_QUERY.value %}
             <div class="row mt-2">
                   <div class='col-3'>Default CRS</div>
                   <div class='col-5 p-1'>
@@ -130,6 +131,7 @@
                         {% endif %}
                   </div>
             </div>
+            {% endif %}
       </div>
 </div>
 

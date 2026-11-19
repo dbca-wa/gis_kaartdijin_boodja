@@ -79,8 +79,12 @@ var kbcatalogue_detail = {
             "description": cataloguedescription,
             "custodian": cataloguecustodianentry,
             "permission_type": permission_type,
-            "default_crs": default_crs || null
         };
+        // The Default CRS field is only shown for entry types that use it;
+        // leave the stored value unchanged when the field is not on the page.
+        if ($('#catalogue-default-crs').length) {
+            post_data["default_crs"] = default_crs || null;
+        }
         var csrf_token = $("#csrfmiddlewaretoken").val();
         var pagetab = $('#pagetab').val();
 
