@@ -1895,7 +1895,7 @@ var kbpublish = {
     },
     show_publish_geoserver_create_or_update_modal: function(geoserver_publish_channel_obj){
         console.log('in show_publish_geoserver_create_or_update_modal')
-        let PUBLISH_STORE_TYPE_GEOTIFF = 1
+        let PUBLISH_STORE_TYPE_GEOPACKAGE = 1
 
         if (geoserver_publish_channel_obj){ // Update existing
             $('#new-update-geoserver-modal-title').text('Update Geoserver Publish Entry');
@@ -1920,7 +1920,7 @@ var kbpublish = {
             $('#new-publish-spatial-format').removeAttr('disabled').val('');
             $('#new-publish-frequency-type').removeAttr('disabled').val('');
             $('#new-publish-workspace').removeAttr('disabled').val('');
-            $('#new-publish-store-type').removeAttr('disabled').val(PUBLISH_STORE_TYPE_GEOTIFF);  
+            $('#new-publish-store-type').removeAttr('disabled').val(PUBLISH_STORE_TYPE_GEOPACKAGE);  
             $('#new-publish-active').removeAttr('disabled').prop('checked', true);
             $('#new-publish-create-cached-layer').removeAttr('disabled').prop('checked', true);
             $('#expire-server-cache-after-n-seconds').removeAttr('disabled').val(kbpublish.var.expire_server_cache_after_n_seconds_default);
