@@ -209,7 +209,8 @@ class ManagementCommands(viewsets.ViewSet):
             elif items_to_sync == 'rules':
                 management.call_command("geoserver_sync_rules")
             elif items_to_sync == 'users':
-                management.call_command("sync_users")
+                # A person asked for a sync, so sync even when the KB data has not changed
+                management.call_command("sync_users", force=True)
             else:
                 raise ValidationError('Invalid items_to_sync value')
             # Return Response
