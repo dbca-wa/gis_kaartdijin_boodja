@@ -153,7 +153,15 @@ class Absorber:
 
                 # If extracted, loop through extracted files
                 for extracted_filepath in os.listdir(temp_dir):
-                    filepaths_to_process.append(os.path.join(temp_dir, extracted_filepath))
+                    extracted_filepath = os.path.join(temp_dir, extracted_filepath)
+                    if extracted_filepath.lower().endswith(('.tiff', '.tif', '.json', '.geojson', '.gpkg', '.geopackage')):
+                        # These files are absorbed one by one below and the layer submission stores
+                        # the path of the file itself (not the archive). temp_dir is removed below,
+                        # so keep the file next to the archive.
+                        extracted_filepath = self.move_extracted_file_to_storage(extracted_filepath, folder_path, folder_name)
+                        if not extracted_filepath:
+                            continue
+                    filepaths_to_process.append(extracted_filepath)
             else:
                 logger.info(f'No compressed algorithm detected for the file: [{path_to_file}].')
                 filepaths_to_process.append(path_to_file)
@@ -190,6 +198,24 @@ class Absorber:
             if compressed_algorithm and os.path.isdir(temp_dir):
                 shutil.rmtree(temp_dir, ignore_errors=True)
                 logger.info(f"Removed extraction directory: [{temp_dir}]")
+
+    def move_extracted_file_to_storage(self, file_path: str, folder_path: str, archive_stem: str) -> Optional[str]:
+        """Moves a file extracted from an archive into the archive's folder.
+
+        The new name is <file stem>.<archive timestamp><suffix>, the same form as a
+        directly uploaded file (e.g. State_Map_Base_FMS.20240606T015418.tif).
+
+        Returns:
+            Optional[str]: The new path, or None when the move failed.
+        """
+        timestamp_str = archive_stem.rsplit('.', 1)[-1]  # archive stem is like: <name>.20240606T015418
+        file_stem, file_suffix = os.path.splitext(os.path.basename(file_path))
+        new_path = os.path.join(folder_path, f'{file_stem}.{timestamp_str}{file_suffix}')
+        if self.storage.move_to_storage(file_path, new_path):
+            logger.info(f'Extracted file: [{file_path}] has been moved to: [{new_path}]')
+            return new_path
+        logger.error(f'Failed to move extracted file: [{file_path}] to: [{new_path}].  Skipping.')
+        return None
 
     def process_tiff_file(self, filepath):
         pathlib_filepath = pathlib.Path(filepath)
