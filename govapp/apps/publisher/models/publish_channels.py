@@ -472,7 +472,7 @@ class GeoServerPublishChannel(mixins.RevisionedMixin):
             pathlib.Path: Path to the file to be transferred to the shared volume.
 
         Raises:
-            FileNotFoundError: If the catalogue entry has no active layer.
+            FileNotFoundError: If the catalogue entry has no active layer, or the GeoTIFF file is missing.
             ValueError: If the store_type is unknown.
         """
         if not self.publish_entry.catalogue_entry.active_layer:
@@ -492,6 +492,8 @@ class GeoServerPublishChannel(mixins.RevisionedMixin):
             )
             return pathlib.Path(geopackage['full_filepath'])
         elif self.store_type == StoreType.GEOTIFF:
+            if not filepath.is_file():
+                raise FileNotFoundError(f'GeoTIFF file not found: [{filepath}]')
             log.info(f"Store type is GEOTIFF; using original file: [{filepath}]")
             return filepath
         else:
