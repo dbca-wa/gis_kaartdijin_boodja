@@ -343,6 +343,9 @@ GEOSERVER_LAYER_HEALTH_CHECK_TIMES = decouple.config(
 GEOSERVER_SYNC_LAYERS_PERIOD_MINS = decouple.config('GEOSERVER_SYNC_LAYERS_PERIOD_MINS', default=1, cast=int)
 GEOSERVER_SYNC_RULES_PERIOD_MINS = decouple.config('GEOSERVER_SYNC_RULES_PERIOD_MINS', default=2, cast=int)
 GEOSERVER_SYNC_USERS_PERIOD_MINS = decouple.config('GEOSERVER_SYNC_USERS_PERIOD_MINS', default=2, cast=int)
+# Timeout of the GeoServer requests made by the user sync, except the user file write (60 seconds).
+# A slow GeoServer sometimes took more than the httpx default of 5 seconds, so the whole sync failed.
+GEOSERVER_USER_SYNC_TIMEOUT_SECONDS = decouple.config('GEOSERVER_USER_SYNC_TIMEOUT_SECONDS', default=10, cast=int)
 SYNC_ITASSETS_USERS_PERIOD_MINS = decouple.config('SYNC_ITASSETS_USERS_PERIOD_MINS', default=2, cast=int)
 PENDING_IMPORT_STALE_THRESHOLD_DAYS = decouple.config('PENDING_IMPORT_STALE_THRESHOLD_DAYS', default=2, cast=int)
 PENDING_IMPORTS_CLEANUP_PERIOD_MINS = decouple.config('PENDING_IMPORTS_CLEANUP_PERIOD_MINS', default=60, cast=int)

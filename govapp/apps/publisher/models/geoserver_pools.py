@@ -28,10 +28,6 @@ UserModel = get_user_model()
 # which takes many seconds when it holds thousands of users. The httpx default is 5 seconds.
 GEOSERVER_USERGROUP_WRITE_TIMEOUT_SECONDS = 60
 
-# Timeout of the other GeoServer requests made by the user sync. A slow GeoServer sometimes took
-# more than the httpx default of 5 seconds, so the whole sync failed.
-GEOSERVER_USER_SYNC_TIMEOUT_SECONDS = 10
-
 
 def encode(s):
     # s = urllib.parsquote(s, safe='')
@@ -293,7 +289,7 @@ class GeoServerPool(mixins.RevisionedMixin):
         response = httpx.get(
             url=f"{self.url}/rest/resource/{encode(path)}",
             auth=self.auth,
-            timeout=GEOSERVER_USER_SYNC_TIMEOUT_SECONDS
+            timeout=settings.GEOSERVER_USER_SYNC_TIMEOUT_SECONDS
         )
         if missing_ok and response.status_code == 404:
             return None
@@ -475,7 +471,7 @@ class GeoServerPool(mixins.RevisionedMixin):
             url=f"{self.base_url_security}/roles/",
             headers=self.headers_json,
             auth=self.auth,
-            timeout=GEOSERVER_USER_SYNC_TIMEOUT_SECONDS
+            timeout=settings.GEOSERVER_USER_SYNC_TIMEOUT_SECONDS
         )
         response.raise_for_status()
         existing_roles = response.json()
@@ -498,7 +494,7 @@ class GeoServerPool(mixins.RevisionedMixin):
             url=f"{self.base_url_security}/roles/group/{encode(group_name)}.json",
             headers=self.headers_json,
             auth=self.auth,
-            timeout=GEOSERVER_USER_SYNC_TIMEOUT_SECONDS
+            timeout=settings.GEOSERVER_USER_SYNC_TIMEOUT_SECONDS
         )
         response.raise_for_status()
         roles_for_group = response.json()
@@ -509,7 +505,7 @@ class GeoServerPool(mixins.RevisionedMixin):
         response = httpx.post(
             url=f"{self.base_url_security}/roles/role/{encode(role_name)}.json",
             auth=self.auth,
-            timeout=GEOSERVER_USER_SYNC_TIMEOUT_SECONDS
+            timeout=settings.GEOSERVER_USER_SYNC_TIMEOUT_SECONDS
         )
         response.raise_for_status()
         log.info(f"Role: [{role_name}] has been created successfully in the GeoServer: [{self}].")
@@ -524,7 +520,7 @@ class GeoServerPool(mixins.RevisionedMixin):
         response = httpx.delete(
             url=f"{self.base_url_security}/roles/role/{encode(role_name)}.json",
             auth=self.auth,
-            timeout=GEOSERVER_USER_SYNC_TIMEOUT_SECONDS
+            timeout=settings.GEOSERVER_USER_SYNC_TIMEOUT_SECONDS
         )
         response.raise_for_status()
         log.info(f"Role: [{role_name}] has been deleted successfully in the GeoServer: [{self}].")
@@ -536,7 +532,7 @@ class GeoServerPool(mixins.RevisionedMixin):
         response = httpx.post(
             url=f"{self.base_url_security}/roles/role/{encode(role_name)}/user/{encode(username)}.json",
             auth=self.auth,
-            timeout=GEOSERVER_USER_SYNC_TIMEOUT_SECONDS
+            timeout=settings.GEOSERVER_USER_SYNC_TIMEOUT_SECONDS
         )
         response.raise_for_status()
         log.info(f"Role: [{role_name}] has been associated successfully with the user: [{username}] in the GeoServer: [{self}].")
@@ -548,7 +544,7 @@ class GeoServerPool(mixins.RevisionedMixin):
         response = httpx.delete(
             url=f"{self.base_url_security}/roles/role/{encode(role_name)}/user/{encode(username)}.json",
             auth=self.auth,
-            timeout=GEOSERVER_USER_SYNC_TIMEOUT_SECONDS
+            timeout=settings.GEOSERVER_USER_SYNC_TIMEOUT_SECONDS
         )
         response.raise_for_status()
         log.info(f"Role: [{role_name}] has been disassociated successfully from the user: [{username}] in the GeoServer: [{self}].")
@@ -560,7 +556,7 @@ class GeoServerPool(mixins.RevisionedMixin):
         response = httpx.post(
             url=f"{self.base_url_security}/roles/role/{encode(role_name)}/group/{encode(group_name)}.json",
             auth=self.auth,
-            timeout=GEOSERVER_USER_SYNC_TIMEOUT_SECONDS
+            timeout=settings.GEOSERVER_USER_SYNC_TIMEOUT_SECONDS
         )
         response.raise_for_status()
         log.info(f"Role: [{role_name}] has been associated successfully with the group: [{group_name}] in the GeoServer: [{self}].")
@@ -572,7 +568,7 @@ class GeoServerPool(mixins.RevisionedMixin):
         response = httpx.delete(
             url=f"{self.base_url_security}/roles/role/{encode(role_name)}/group/{encode(group_name)}.json",
             auth=self.auth,
-            timeout=GEOSERVER_USER_SYNC_TIMEOUT_SECONDS
+            timeout=settings.GEOSERVER_USER_SYNC_TIMEOUT_SECONDS
         )
         response.raise_for_status()
         log.info(f"Role: [{role_name}] has been disassociated successfully from the group: [{group_name}] in the GeoServer: [{self}].")
