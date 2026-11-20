@@ -123,6 +123,20 @@ class GeoServerPoolAdmin(reversion.admin.VersionAdmin):
     version.short_description = 'Geoserver Version'
 
 
+class GeoServerUserSyncStateAdmin(admin.ModelAdmin):
+    """Read-only admin for the user sync state. Delete a row to make the next sync_users run sync that GeoServer."""
+    list_display = ('id', 'geoserver_pool', 'cluster_name', 'synced_at')
+    list_display_links = ('id', 'geoserver_pool',)
+    readonly_fields = ('geoserver_pool', 'cluster_name', 'data_hash', 'synced_at')
+    ordering = ('geoserver_pool', 'cluster_name')
+
+    def has_add_permission(self, request):
+        return False
+
+    def has_change_permission(self, request, obj=None):
+        return False
+
+
 class GeoServerPublishChannelAdmin(reversion.admin.VersionAdmin):
     search_fields = ('id', 'publish_entry__catalogue_entry__name', 'geoserver_pool__name', 'workspace__name',)
     list_display = (
@@ -461,6 +475,7 @@ admin.site.register(models.publish_entries.PublishEntry, PublishEntryAdmin)
 admin.site.register(models.notifications.EmailNotification, EmailNotificationAdmin)
 admin.site.register(models.workspaces.Workspace, WorkspaceAdmin)
 admin.site.register(models.geoserver_pools.GeoServerPool, GeoServerPoolAdmin)
+admin.site.register(models.geoserver_pools.GeoServerUserSyncState, GeoServerUserSyncStateAdmin)
 admin.site.register(models.geoserver_queues.GeoServerQueue, GeoServerQueueAdmin)
 admin.site.register(models.geoserver_roles_groups.GeoServerRole, GeoServerRoleAdmin)
 admin.site.register(models.geoserver_roles_groups.GeoServerGroup, GeoServerGroupAdmin)

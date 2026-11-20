@@ -772,3 +772,34 @@ class GeoserverClusterPool(models.Model):
                 violation_error_message="A cluster node with this name already exists in this GeoServer pool.",
             ),
         ]
+
+
+class GeoServerUserSyncState(models.Model):
+    """The hash of the KB user, group and role data last synced to one GeoServer.
+
+    One row per target of GeoServerPool.targets(): the pool and the cluster node name
+    (blank for a pool without named nodes). sync_users skips a GeoServer whose hash has not changed.
+    """
+
+    geoserver_pool = models.ForeignKey(
+        'GeoServerPool',
+        on_delete=models.CASCADE,
+        related_name='user_sync_states'
+    )
+    cluster_name = models.CharField(max_length=100, blank=True, default="")
+    data_hash = models.CharField(max_length=64)
+    synced_at = models.DateTimeField()
+
+    def __str__(self):
+        text = f"{self.geoserver_pool} [{self.cluster_name}]" if self.cluster_name else f"{self.geoserver_pool}"
+        return f"User sync state for {text}"
+
+    class Meta:
+        verbose_name = "GeoServer User Sync State"
+        verbose_name_plural = "GeoServer User Sync States"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["geoserver_pool", "cluster_name"],
+                name="unique_user_sync_state_per_target",
+            ),
+        ]
