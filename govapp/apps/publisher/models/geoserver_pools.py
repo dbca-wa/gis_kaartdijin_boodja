@@ -12,6 +12,7 @@ import httpx
 import json
 import urllib
 import copy
+import hashlib
 import xml.etree.ElementTree as ET
 
 # Local
@@ -595,6 +596,36 @@ class GeoServerPool(mixins.RevisionedMixin):
 
         log.info(f'User file built: [{len(users)}] user(s), [{len(groups_element)}] group(s).')
         return ET.tostring(root, encoding='utf-8', xml_declaration=True)
+
+    @staticmethod
+    def build_user_sync_hash():
+        """Return a SHA-256 hex digest of everything sync_users sends to a GeoServer, from KB data only.
+
+        The input is the user file, the active roles, the roles linked directly to users, the roles
+        linked to active groups, and the settings that change what is sent. When the digest is the same
+        as at the last successful sync of a GeoServer, that GeoServer is already up to date.
+        Keep this in step with sync_usergroup_file, sync_roles, sync_user_roles and sync_groups_roles.
+        """
+        user_roles = {}
+        for role_user in GeoServerRoleUser.objects.filter(geoserver_role__active=True).exclude(user__email__isnull=True).exclude(user__email=''):
+            user_roles.setdefault(role_user.user.email, set()).add(role_user.geoserver_role.name)
+
+        data = {
+            'usergroup_file': GeoServerPool.build_usergroup_file().decode('utf-8'),
+            'roles': sorted(GeoServerRole.objects.filter(active=True).values_list('name', flat=True)),
+            'user_roles': {email: sorted(roles) for email, roles in user_roles.items()},
+            'group_roles': {
+                group.name: sorted(role.name for role in group.geoserver_roles.all())
+                for group in GeoServerGroup.objects.filter(active=True)
+            },
+            'settings': {
+                'usergroup_service_name': settings.GEOSERVER_USERGROUP_SERVICE_NAME_CUSTOM,
+                'non_deletable_users': sorted(settings.NON_DELETABLE_USERS),
+                'non_deletable_roles': sorted(settings.NON_DELETABLE_ROLES),
+                'default_roles': sorted(settings.DEFAULT_ROLES_IN_GEOSERVER),
+            },
+        }
+        return hashlib.sha256(json.dumps(data, sort_keys=True).encode('utf-8')).hexdigest()
 
     def sync_roles(self):
         all_roles_in_kb = set(list(GeoServerRole.objects.filter(active=True).values_list('name', flat=True)))
