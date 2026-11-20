@@ -12,6 +12,7 @@ import httpx
 import json
 import urllib
 import copy
+import hashlib
 import xml.etree.ElementTree as ET
 
 # Local
@@ -287,7 +288,8 @@ class GeoServerPool(mixins.RevisionedMixin):
         self.check_variable(path, 'Resource path')
         response = httpx.get(
             url=f"{self.url}/rest/resource/{encode(path)}",
-            auth=self.auth
+            auth=self.auth,
+            timeout=settings.GEOSERVER_USER_SYNC_TIMEOUT_SECONDS
         )
         if missing_ok and response.status_code == 404:
             return None
@@ -468,7 +470,8 @@ class GeoServerPool(mixins.RevisionedMixin):
         response = httpx.get(
             url=f"{self.base_url_security}/roles/",
             headers=self.headers_json,
-            auth=self.auth
+            auth=self.auth,
+            timeout=settings.GEOSERVER_USER_SYNC_TIMEOUT_SECONDS
         )
         response.raise_for_status()
         existing_roles = response.json()
@@ -490,7 +493,8 @@ class GeoServerPool(mixins.RevisionedMixin):
         response = httpx.get(
             url=f"{self.base_url_security}/roles/group/{encode(group_name)}.json",
             headers=self.headers_json,
-            auth=self.auth
+            auth=self.auth,
+            timeout=settings.GEOSERVER_USER_SYNC_TIMEOUT_SECONDS
         )
         response.raise_for_status()
         roles_for_group = response.json()
@@ -500,7 +504,8 @@ class GeoServerPool(mixins.RevisionedMixin):
         self.check_variable(role_name, 'Role name')
         response = httpx.post(
             url=f"{self.base_url_security}/roles/role/{encode(role_name)}.json",
-            auth=self.auth
+            auth=self.auth,
+            timeout=settings.GEOSERVER_USER_SYNC_TIMEOUT_SECONDS
         )
         response.raise_for_status()
         log.info(f"Role: [{role_name}] has been created successfully in the GeoServer: [{self}].")
@@ -514,7 +519,8 @@ class GeoServerPool(mixins.RevisionedMixin):
 
         response = httpx.delete(
             url=f"{self.base_url_security}/roles/role/{encode(role_name)}.json",
-            auth=self.auth
+            auth=self.auth,
+            timeout=settings.GEOSERVER_USER_SYNC_TIMEOUT_SECONDS
         )
         response.raise_for_status()
         log.info(f"Role: [{role_name}] has been deleted successfully in the GeoServer: [{self}].")
@@ -525,7 +531,8 @@ class GeoServerPool(mixins.RevisionedMixin):
         self.check_variable(role_name, 'Role name')
         response = httpx.post(
             url=f"{self.base_url_security}/roles/role/{encode(role_name)}/user/{encode(username)}.json",
-            auth=self.auth
+            auth=self.auth,
+            timeout=settings.GEOSERVER_USER_SYNC_TIMEOUT_SECONDS
         )
         response.raise_for_status()
         log.info(f"Role: [{role_name}] has been associated successfully with the user: [{username}] in the GeoServer: [{self}].")
@@ -536,7 +543,8 @@ class GeoServerPool(mixins.RevisionedMixin):
         self.check_variable(role_name, 'Role name')
         response = httpx.delete(
             url=f"{self.base_url_security}/roles/role/{encode(role_name)}/user/{encode(username)}.json",
-            auth=self.auth
+            auth=self.auth,
+            timeout=settings.GEOSERVER_USER_SYNC_TIMEOUT_SECONDS
         )
         response.raise_for_status()
         log.info(f"Role: [{role_name}] has been disassociated successfully from the user: [{username}] in the GeoServer: [{self}].")
@@ -547,7 +555,8 @@ class GeoServerPool(mixins.RevisionedMixin):
         self.check_variable(group_name, 'Group name')
         response = httpx.post(
             url=f"{self.base_url_security}/roles/role/{encode(role_name)}/group/{encode(group_name)}.json",
-            auth=self.auth
+            auth=self.auth,
+            timeout=settings.GEOSERVER_USER_SYNC_TIMEOUT_SECONDS
         )
         response.raise_for_status()
         log.info(f"Role: [{role_name}] has been associated successfully with the group: [{group_name}] in the GeoServer: [{self}].")
@@ -558,7 +567,8 @@ class GeoServerPool(mixins.RevisionedMixin):
         self.check_variable(group_name, 'Group name')
         response = httpx.delete(
             url=f"{self.base_url_security}/roles/role/{encode(role_name)}/group/{encode(group_name)}.json",
-            auth=self.auth
+            auth=self.auth,
+            timeout=settings.GEOSERVER_USER_SYNC_TIMEOUT_SECONDS
         )
         response.raise_for_status()
         log.info(f"Role: [{role_name}] has been disassociated successfully from the group: [{group_name}] in the GeoServer: [{self}].")
@@ -595,6 +605,36 @@ class GeoServerPool(mixins.RevisionedMixin):
 
         log.info(f'User file built: [{len(users)}] user(s), [{len(groups_element)}] group(s).')
         return ET.tostring(root, encoding='utf-8', xml_declaration=True)
+
+    @staticmethod
+    def build_user_sync_hash():
+        """Return a SHA-256 hex digest of everything sync_users sends to a GeoServer, from KB data only.
+
+        The input is the user file, the active roles, the roles linked directly to users, the roles
+        linked to active groups, and the settings that change what is sent. When the digest is the same
+        as at the last successful sync of a GeoServer, that GeoServer is already up to date.
+        Keep this in step with sync_usergroup_file, sync_roles, sync_user_roles and sync_groups_roles.
+        """
+        user_roles = {}
+        for role_user in GeoServerRoleUser.objects.filter(geoserver_role__active=True).exclude(user__email__isnull=True).exclude(user__email=''):
+            user_roles.setdefault(role_user.user.email, set()).add(role_user.geoserver_role.name)
+
+        data = {
+            'usergroup_file': GeoServerPool.build_usergroup_file().decode('utf-8'),
+            'roles': sorted(GeoServerRole.objects.filter(active=True).values_list('name', flat=True)),
+            'user_roles': {email: sorted(roles) for email, roles in user_roles.items()},
+            'group_roles': {
+                group.name: sorted(role.name for role in group.geoserver_roles.all())
+                for group in GeoServerGroup.objects.filter(active=True)
+            },
+            'settings': {
+                'usergroup_service_name': settings.GEOSERVER_USERGROUP_SERVICE_NAME_CUSTOM,
+                'non_deletable_users': sorted(settings.NON_DELETABLE_USERS),
+                'non_deletable_roles': sorted(settings.NON_DELETABLE_ROLES),
+                'default_roles': sorted(settings.DEFAULT_ROLES_IN_GEOSERVER),
+            },
+        }
+        return hashlib.sha256(json.dumps(data, sort_keys=True).encode('utf-8')).hexdigest()
 
     def sync_roles(self):
         all_roles_in_kb = set(list(GeoServerRole.objects.filter(active=True).values_list('name', flat=True)))
@@ -770,5 +810,36 @@ class GeoserverClusterPool(models.Model):
                 condition=~Q(name=""),
                 name="unique_cluster_node_name_per_pool",
                 violation_error_message="A cluster node with this name already exists in this GeoServer pool.",
+            ),
+        ]
+
+
+class GeoServerUserSyncState(models.Model):
+    """The hash of the KB user, group and role data last synced to one GeoServer.
+
+    One row per target of GeoServerPool.targets(): the pool and the cluster node name
+    (blank for a pool without named nodes). sync_users skips a GeoServer whose hash has not changed.
+    """
+
+    geoserver_pool = models.ForeignKey(
+        'GeoServerPool',
+        on_delete=models.CASCADE,
+        related_name='user_sync_states'
+    )
+    cluster_name = models.CharField(max_length=100, blank=True, default="")
+    data_hash = models.CharField(max_length=64)
+    synced_at = models.DateTimeField()
+
+    def __str__(self):
+        text = f"{self.geoserver_pool} [{self.cluster_name}]" if self.cluster_name else f"{self.geoserver_pool}"
+        return f"User sync state for {text}"
+
+    class Meta:
+        verbose_name = "GeoServer User Sync State"
+        verbose_name_plural = "GeoServer User Sync States"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["geoserver_pool", "cluster_name"],
+                name="unique_user_sync_state_per_target",
             ),
         ]
