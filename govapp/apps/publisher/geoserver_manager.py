@@ -801,7 +801,8 @@ class GeoServerSyncExcutor:
             layers = geoserver_obj.get_layers()
             layer_names = [layer['name'].split(':')[1] for layer in layers]
 
-            log.info(f'Layers on the geoserver: [{geoserver_info.url}: [{layer_names}]]')
+            # Log only the number of layers: the full lists are long and this runs every minute
+            log.info(f'Number of layers on the geoserver: [{geoserver_info.url}]: {len(layer_names)}')
             
             # Retrive layer names from DB for this geoserver
             name_list = GeoServerPublishChannel.objects.filter(
@@ -811,7 +812,7 @@ class GeoServerSyncExcutor:
             ).values_list('publish_entry__catalogue_entry__name', flat=True)
             synced_layer_names_set = set(name_list)
 
-            log.info(f'Layers on the KB: [{synced_layer_names_set}] for the geoserver: [{geoserver_info.url}]')
+            log.info(f'Number of layers on the KB: {len(synced_layer_names_set)} for the geoserver: [{geoserver_info.url}]')
             
             # Compare layer names
             purge_list = [layer_name for layer_name in layer_names if layer_name not in synced_layer_names_set]

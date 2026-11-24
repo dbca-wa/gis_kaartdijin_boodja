@@ -1,6 +1,6 @@
 from django.core.management import base
 from typing import Any
-from govapp.apps.publisher.models.publish_channels import GeoServerPublishChannel
+from govapp.apps.publisher.models.publish_channels import perform_geoserver_layer_health_checks
 
 
 class Command(base.BaseCommand):
@@ -12,6 +12,4 @@ class Command(base.BaseCommand):
         self.stdout.write("Performing geoserver layer healthcheck...")
 
         # Go!
-        geoserver_publish_channels = GeoServerPublishChannel.objects.filter(active=True, geoserver_pool__enabled=True)
-        for geoserver_publish_channel in geoserver_publish_channels:
-            geoserver_publish_channel.perform_geoserver_layer_health_check()
+        perform_geoserver_layer_health_checks()

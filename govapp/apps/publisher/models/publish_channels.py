@@ -373,57 +373,6 @@ class GeoServerPublishChannel(mixins.RevisionedMixin):
         # Generate String and Return
         return f"{self.id}: {self.publish_entry.name}"
 
-    def perform_geoserver_layer_health_check(self):
-        if not self.geoserver_pool or not self.geoserver_pool.enabled:
-            return
-
-        try:
-            geoserver_obj = geoserverWithCustomCreds(self.geoserver_pool.url, self.geoserver_pool.username, self.geoserver_pool.password)
-
-            try:
-                response_data = geoserver_obj.get_layer_details(self.layer_name_with_workspace)  # Return value can be the layer details or None
-                if response_data:
-                    health_status = GeoServerLayerHealthcheck.HEALTHY
-                    error_message = None
-                else:
-                    raise Exception('response data is something wrong...')
-            except Exception as e:
-                health_status = GeoServerLayerHealthcheck.UNHEALTHY
-                error_message = str(e)
-
-            # Delete stale records that were created with a different layer name
-            # (e.g. before a workspace was configured on this channel)
-            GeoServerLayerHealthcheck.objects.filter(
-                geoserver_publish_channel=self
-            ).exclude(
-                layer_name=self.layer_name_with_workspace
-            ).delete()
-
-            GeoServerLayerHealthcheck.objects.update_or_create(
-                geoserver_publish_channel=self,
-                defaults={
-                    'layer_name': self.layer_name_with_workspace,
-                    'health_status': health_status,
-                    'error_message': error_message,
-                    'last_check_time': timezone.now()
-                }
-            )
-        except Exception as e:
-            GeoServerLayerHealthcheck.objects.filter(
-                geoserver_publish_channel=self
-            ).exclude(
-                layer_name=self.layer_name_with_workspace
-            ).delete()
-            GeoServerLayerHealthcheck.objects.update_or_create(
-                geoserver_publish_channel=self,
-                defaults={
-                    'layer_name': self.layer_name_with_workspace,
-                    'health_status': GeoServerLayerHealthcheck.UNHEALTHY,
-                    'error_message': str(e),
-                    'last_check_time': timezone.now()
-                }
-            )
-
     @property
     def name(self) -> str:
         return self.publish_entry.name
@@ -712,3 +661,76 @@ class GeoServerLayerHealthcheck(mixins.RevisionedMixin):
     health_status = models.CharField(max_length=20, choices=HEALTH_CHOICES, default=UNKNOWN)
     last_check_time = models.DateTimeField()
     error_message = models.TextField(blank=True, null=True)
+    # Name of the cluster node checked (GeoServerPool.targets()); blank for a pool without named nodes.
+    cluster_name = models.CharField(max_length=100, blank=True, default="")
+
+    class Meta:
+        constraints = [
+            models.UniqueConstraint(
+                fields=["geoserver_publish_channel", "cluster_name"],
+                name="unique_layer_healthcheck_per_cluster",
+            ),
+        ]
+
+
+def perform_geoserver_layer_health_checks() -> None:
+    """Checks the layers of all active channels with an enabled pool.
+
+    For each target of the pool (each named cluster node, or the pool itself), the layer
+    list is read from GeoServer once and every active channel of the pool gets one
+    health check record for that target.
+    """
+    for pool in GeoServerPool.objects.filter(enabled=True):
+        channels = list(
+            GeoServerPublishChannel.objects.filter(active=True, geoserver_pool=pool).select_related(
+                'publish_entry', 'workspace'
+            )
+        )
+        if not channels:
+            continue
+
+        targets = pool.targets()
+        for target in targets:
+            target_text = target.cluster_name or pool.name or str(pool.id)
+            try:
+                geoserver_obj = geoserverWithCustomCreds(target.url, target.username, target.password)
+                layer_names = {layer['name'] for layer in geoserver_obj.get_layers()}
+                list_error = None
+            except Exception as e:
+                log.error(f"Unable to get the layer list from GeoServer [{target_text}]: {e}")
+                layer_names = set()
+                list_error = f"Could not get the layer list from {target_text}: {e}"
+
+            for channel in channels:
+                layer_name = channel.layer_name_with_workspace
+                if list_error:
+                    health_status = GeoServerLayerHealthcheck.UNHEALTHY
+                    error_message = list_error
+                elif layer_name in layer_names or (
+                    not channel.workspace and any(name.split(':')[-1] == layer_name for name in layer_names)
+                ):
+                    health_status = GeoServerLayerHealthcheck.HEALTHY
+                    error_message = None
+                else:
+                    health_status = GeoServerLayerHealthcheck.UNHEALTHY
+                    error_message = f"Layer not found on {target_text}"
+
+                GeoServerLayerHealthcheck.objects.update_or_create(
+                    geoserver_publish_channel=channel,
+                    cluster_name=target.cluster_name,
+                    defaults={
+                        'layer_name': layer_name,
+                        'health_status': health_status,
+                        'error_message': error_message,
+                        'last_check_time': timezone.now()
+                    }
+                )
+
+        # Delete stale records: a different layer name (e.g. before a workspace was configured
+        # on the channel) or a cluster node that is no longer a target (disabled or removed)
+        target_cluster_names = [target.cluster_name for target in targets]
+        for channel in channels:
+            GeoServerLayerHealthcheck.objects.filter(geoserver_publish_channel=channel).exclude(
+                layer_name=channel.layer_name_with_workspace,
+                cluster_name__in=target_cluster_names,
+            ).delete()
