@@ -3,6 +3,21 @@
 from django.db import migrations, models
 
 
+def delete_duplicate_health_checks(apps, schema_editor):
+    """Keeps only the newest health check record of each channel.
+
+    Without a unique constraint, runs at the same time could create more than one
+    record for a channel. The new constraint (channel, cluster_name) needs one record.
+    """
+    GeoServerLayerHealthcheck = apps.get_model('publisher', 'GeoServerLayerHealthcheck')
+    kept_channel_ids = set()
+    for record in GeoServerLayerHealthcheck.objects.order_by('geoserver_publish_channel_id', '-last_check_time', '-id'):
+        if record.geoserver_publish_channel_id in kept_channel_ids:
+            record.delete()
+        else:
+            kept_channel_ids.add(record.geoserver_publish_channel_id)
+
+
 class Migration(migrations.Migration):
 
     dependencies = [
@@ -10,6 +25,7 @@ class Migration(migrations.Migration):
     ]
 
     operations = [
+        migrations.RunPython(delete_duplicate_health_checks, migrations.RunPython.noop),
         migrations.AddField(
             model_name='geoserverlayerhealthcheck',
             name='cluster_name',
