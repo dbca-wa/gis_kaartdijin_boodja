@@ -185,8 +185,8 @@ class GeoServerPublishChannelAdmin(reversion.admin.VersionAdmin):
 
 
 class GeoServerHealthCheckAdmin(reversion.admin.VersionAdmin):
-    list_display = ('id', 'coloured_health_status', 'geoserver_publish_channel', 'layer_name', 'last_check_time', 'error_message',)
-    list_filter = ('health_status',)
+    list_display = ('id', 'coloured_health_status', 'geoserver_publish_channel', 'cluster_name', 'layer_name', 'last_check_time', 'error_message',)
+    list_filter = ('health_status', 'cluster_name',)
 
     class Media:
         css = {'all': ('common/css/admin_custom.css',)}

@@ -134,6 +134,7 @@ class GeoServerLayerHealthcheckSerializer(serializers.ModelSerializer):
             'id',
             'geoserver_publish_channel',
             'layer_name',
+            'cluster_name',
             'health_status',
             'health_status_str',
             'last_check_time',
