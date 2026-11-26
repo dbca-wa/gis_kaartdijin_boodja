@@ -1410,3 +1410,26 @@ class GeoServerLayerHealthcheckViewSet(viewsets.ReadOnlyModelViewSet):
     pagination_class = DatatablesPageNumberPagination
     renderer_classes = [DatatablesRenderer,]  # DatatablesRenderer is required to make pagination work correctly.
     filter_backends = [DatatablesFilterBackend,]
+
+    def get_queryset(self):
+        # Only the records that the health check still updates: active channels with an enabled
+        # pool. The same rule as the Layer Health menu badge and the layer health API
+        # (get_unhealthy_channels), so the numbers match. Old records of other channels stay in
+        # the database and show again once the channel is checked.
+        queryset = super().get_queryset().filter(
+            geoserver_publish_channel__active=True,
+            geoserver_publish_channel__geoserver_pool__enabled=True,
+        )
+        # Health check levels ticked on the page, e.g. "1,2". An empty value (nothing ticked)
+        # returns no record; without the parameter, all levels are returned.
+        levels = self.request.query_params.get('health_check_levels')
+        if levels is not None:
+            level_values = [int(level) for level in levels.split(',') if level.strip().isdigit()]
+            queryset = queryset.filter(geoserver_publish_channel__health_check_level__in=level_values)
+        # Health statuses ticked on the page, e.g. "unhealthy". The same rule: empty value -> no
+        # record, no parameter -> all statuses.
+        statuses = self.request.query_params.get('health_statuses')
+        if statuses is not None:
+            status_values = [value.strip() for value in statuses.split(',') if value.strip()]
+            queryset = queryset.filter(health_status__in=status_values)
+        return queryset

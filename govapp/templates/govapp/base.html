@@ -133,8 +133,10 @@
     $(document).ready(function(){
         let menuItemCatalogue = $('#primary-menu-item-catalogue');
         let menuItemPublish = $('#primary-menu-item-publish');
+        let menuItemLayerHealth = $('#primary-menu-item-layer-health');
         let arrCatalogue = ['/catalogue', '/layer'];
         let arrPublish = ['/publish'];
+        let arrLayerHealth = ['/geoserver-layer-healthcheck'];
 
         let currentUrl = window.location.href;
         toggleActiveClassForMenuItem(currentUrl);
@@ -146,6 +148,8 @@
             } else if (arrPublish.some(element => url.includes(element))){
                 menuItemCatalogue.removeClass('active');
                 menuItemPublish.addClass('active');
+            } else if (arrLayerHealth.some(element => url.includes(element))){
+                menuItemLayerHealth.addClass('active');
             }
         }
 

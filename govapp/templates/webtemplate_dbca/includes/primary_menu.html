@@ -1,2 +1,13 @@
 <li class="nav-item"><a class="nav-link" href="/catalogue/entries/" id="primary-menu-item-catalogue">Catalogue</a></li>
 <li class="nav-item"><a class="nav-link" href="/publish" id="primary-menu-item-publish">Publish</a></li>
+{% if request.user.is_superuser or is_admin %}
+<li class="nav-item">
+    <a class="nav-link" href="/geoserver-layer-healthcheck/" id="primary-menu-item-layer-health"{% if layer_health_badge_title %} title="{{ layer_health_badge_title }}"{% endif %}>
+        Layer Health
+        {# One badge per level. They show the health status: red if the level has unhealthy layers, light grey if none #}
+        {% for badge in layer_health_level_badges %}
+        <span class="badge rounded-pill {% if badge.count %}bg-danger{% else %}bg-light text-secondary border{% endif %}">{{ badge.letter }} {{ badge.count }}</span>
+        {% endfor %}
+    </a>
+</li>
+{% endif %}
