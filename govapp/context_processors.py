@@ -5,12 +5,14 @@
 from django import conf
 from django import http
 from django.core.cache import cache
+from django.db.models import Count
 
 # Typing
 from typing import Any
 
 from govapp import settings
 from govapp.apps.accounts.utils import user_can_view_logs
+from govapp.apps.publisher.models.publish_channels import HealthCheckLevel, get_unhealthy_channels
 
 
 def variables(request: http.HttpRequest) -> dict[str, Any]:
@@ -47,6 +49,27 @@ def variables(request: http.HttpRequest) -> dict[str, Any]:
             is_able_to_view_logs = user_can_view_logs(request.user)
             cache.set('is_able_to_view_logs' + str(request.session.session_key), is_catalogue_admin, 3600)
     
+    # Layer Health menu badges (one per level), only for the users who see the menu item
+    layer_health_unhealthy_count = 0
+    layer_health_badge_title = ''
+    layer_health_level_badges = []
+    if request.user.is_superuser or is_admin:
+        # Number of unhealthy layers per health check level, in one query
+        level_counts = dict(
+            get_unhealthy_channels().order_by().values_list('health_check_level').annotate(n=Count('id', distinct=True))
+        )
+        layer_health_unhealthy_count = sum(level_counts.values())
+        if layer_health_unhealthy_count:
+            per_level = ', '.join(f'{level.label} {level_counts.get(level.value, 0)}' for level in HealthCheckLevel)
+            layer_text = 'layer' if layer_health_unhealthy_count == 1 else 'layers'
+            # e.g. "29 unhealthy layers: Critical 1, Business Hours 0, Non Critical 28"
+            layer_health_badge_title = f'{layer_health_unhealthy_count} unhealthy {layer_text}: {per_level}'
+            # One small badge per level, e.g. "C 1", "B 0", "N 28" (first letter of the level name)
+            layer_health_level_badges = [
+                {'letter': level.label[0], 'count': level_counts.get(level.value, 0)}
+                for level in HealthCheckLevel
+            ]
+
     return {
         "template_group": "kaartdijinboodja",
         "template_title": "",
@@ -59,4 +82,6 @@ def variables(request: http.HttpRequest) -> dict[str, Any]:
         'is_catalogue_admin': is_catalogue_admin,
         'MANAGEMENT_COMMANDS_PAGE_ENABLED': conf.settings.MANAGEMENT_COMMANDS_PAGE_ENABLED,
         'is_able_to_view_logs': is_able_to_view_logs,
+        'layer_health_badge_title': layer_health_badge_title,
+        'layer_health_level_badges': layer_health_level_badges,
     }

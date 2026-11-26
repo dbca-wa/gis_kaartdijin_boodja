@@ -26,6 +26,7 @@ from django.contrib.auth import views as auth_views
 # Local
 from govapp import views
 from govapp.apps.accounts.views import FileDeleteView, FileDownloadView, FileListView
+from govapp.apps.publisher.views_layer_health import LayerHealthView
 
 
 # Admin Site Settings
@@ -52,6 +53,7 @@ urlpatterns = [
     urls.path("api/logs/", urls.include("govapp.apps.logs.urls")),
     urls.path("api/publish/", urls.include("govapp.apps.publisher.urls")),
     urls.path("api/geoserver-manager/", urls.include("govapp.apps.publisher.urls_geoserver_manager")),
+    urls.path("api/layer-health/", LayerHealthView.as_view(), name="layer-health"),
 
     # Management Command Endpoints
     urls.path("api/management/", urls.include("govapp.commands")),

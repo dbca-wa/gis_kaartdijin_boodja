@@ -15,6 +15,24 @@
             </div>
             </div>
             <div class="card-body collapse show" id="box1-card-body">
+                <div class="mb-2" id="health-check-level-filter">
+                    <span class="me-2">Health Check Level:</span>
+                    {% for value, label in health_check_levels %}
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input health-check-level-checkbox" type="checkbox" id="health-check-level-{{ value }}" value="{{ value }}" checked>
+                        <label class="form-check-label" for="health-check-level-{{ value }}">{{ label }}</label>
+                    </div>
+                    {% endfor %}
+                </div>
+                <div class="mb-2" id="health-status-filter">
+                    <span class="me-2">Health Status:</span>
+                    {% for value, label, ticked, badge_class in health_statuses %}
+                    <div class="form-check form-check-inline">
+                        <input class="form-check-input health-status-checkbox" type="checkbox" id="health-status-{{ value }}" value="{{ value }}"{% if ticked %} checked{% endif %}>
+                        <label class="form-check-label" for="health-status-{{ value }}"><span class="badge rounded-pill {{ badge_class }}">{{ label }}</span></label>
+                    </div>
+                    {% endfor %}
+                </div>
                 <table id="geoServerGroupTable" class="table table-striped table-bordered table-hover my-2" style="width:100%">
                     <thead>
                         <!-- Headers here -->
@@ -41,7 +59,14 @@
                         "url": "/api/publish/geoserver_layer_healthcheck/",
                         "type": "GET",
                         "data": function(d){
-                            // Add custom parameters here like filtering.
+                            // Ticked health check levels, e.g. "1,2" (empty when nothing is ticked)
+                            d.health_check_levels = $('.health-check-level-checkbox:checked').map(function(){
+                                return this.value;
+                            }).get().join(',');
+                            // Ticked health statuses, e.g. "unhealthy" (empty when nothing is ticked)
+                            d.health_statuses = $('.health-status-checkbox:checked').map(function(){
+                                return this.value;
+                            }).get().join(',');
                         },
                     },
                     "columnDefs": [
@@ -64,11 +89,10 @@
                             "name": "geoserver_publish_channel__geoserver_pool__name"
                         },
                         {
-                            "data": "cluster_name",
-                            "title": "Cluster",
-                            "render": function(row, type, full){
-                                return row ? row : '-'
-                            }
+                            "data": "health_check_level_name",
+                            "title": "Level",
+                            "name": "geoserver_publish_channel__health_check_level",
+                            "searchable": false
                         },
                         { 
                             "data": "layer_name",
@@ -102,6 +126,25 @@
                         {
                             "data": "error_message",
                             "title": "Error Message"
+                        },
+                        {
+                            "data": "checked_url",
+                            "title": "Checked URL",
+                            "orderable": false,
+                            "searchable": false,
+                            "render": function(row, type, full){
+                                // Last request of the check, to try the same request in the browser
+                                if (!row) {
+                                    return '-'
+                                }
+                                let link = document.createElement('a');
+                                link.href = row;
+                                link.target = '_blank';
+                                link.style.textDecoration = 'none';
+                                link.textContent = 'Open';
+                                link.title = row;
+                                return link.outerHTML;
+                            }
                         }
                     ],
                     "paging": true,
@@ -119,7 +162,9 @@
                 });
             }
             function setupEventHandlers() {
-
+                $('.health-check-level-checkbox, .health-status-checkbox').on('change', function(){
+                    $('#geoServerGroupTable').DataTable().ajax.reload();
+                });
             }
             // Initialization function
             function init() {

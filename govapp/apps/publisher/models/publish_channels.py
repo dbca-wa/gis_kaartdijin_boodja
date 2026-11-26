@@ -7,6 +7,8 @@ import pathlib
 import shutil
 import os
 import ftplib
+import time
+from typing import Optional
 
 # Third-Party
 from django import conf
@@ -272,6 +274,13 @@ class StoreType(models.IntegerChoices):
     GEOTIFF = 2, 'GeoTiff'
 
 
+class HealthCheckLevel(models.IntegerChoices):
+    """How often the layer health check checks a channel (see the GEOSERVER_LAYER_HEALTH_CHECK_* settings)."""
+    CRITICAL = 1, 'Critical'
+    BUSINESS_HOURS = 2, 'Business Hours'
+    NON_CRITICAL = 3, 'Non Critical'
+
+
 class GeoServerPublishChannelManager(models.Manager):
     def get_queryset(self):
         return super().get_queryset().select_related('workspace', 'publish_entry', 'geoserver_pool')
@@ -336,6 +345,11 @@ class GeoServerPublishChannel(mixins.RevisionedMixin):
         validators=[
             MinValueValidator(0)
         ]
+    )
+    health_check_level = models.IntegerField(
+        choices=HealthCheckLevel.choices,
+        default=HealthCheckLevel.NON_CRITICAL,
+        help_text="How often the layer health check checks this layer.",
     )
 
     objects = GeoServerPublishChannelManager()
@@ -663,6 +677,8 @@ class GeoServerLayerHealthcheck(mixins.RevisionedMixin):
     error_message = models.TextField(blank=True, null=True)
     # Name of the cluster node checked (GeoServerPool.targets()); blank for a pool without named nodes.
     cluster_name = models.CharField(max_length=100, blank=True, default="")
+    # URL of the last request of the last check, to see what was checked (no credentials in it)
+    checked_url = models.TextField(blank=True, default="")
 
     class Meta:
         constraints = [
@@ -673,64 +689,130 @@ class GeoServerLayerHealthcheck(mixins.RevisionedMixin):
         ]
 
 
-def perform_geoserver_layer_health_checks() -> None:
-    """Checks the layers of all active channels with an enabled pool.
+def perform_geoserver_layer_health_checks(level: Optional[int] = None) -> None:
+    """Checks that a user can get each layer of the active channels with an enabled pool.
 
-    For each target of the pool (each named cluster node, or the pool itself), the layer
-    list is read from GeoServer once and every active channel of the pool gets one
-    health check record for that target.
+    Each channel is checked once through the pool's health check URL (or its URL when blank)
+    with GeoServer.check_layer_map(). Clusters are not checked one by one.
+
+    Args:
+        level (Optional[int]): HealthCheckLevel of the channels to check. None checks all.
     """
+    # httpx logs one INFO line per request, 3 per layer. Hide them during the check to keep the
+    # log short (this function logs the unhealthy layers itself). The level of the "httpx" logger
+    # is set back afterwards. Cron jobs and the management commands page run this in a
+    # single-threaded process, so no other request's httpx line is hidden.
+    httpx_logger = logging.getLogger("httpx")
+    previous_level = httpx_logger.level
+    httpx_logger.setLevel(logging.WARNING)
+    try:
+        _perform_geoserver_layer_health_checks(level)
+    finally:
+        httpx_logger.setLevel(previous_level)
+
+
+def _perform_geoserver_layer_health_checks(level: Optional[int]) -> None:
+    """Checks the channels of the given level (all if None); see perform_geoserver_layer_health_checks()."""
     for pool in GeoServerPool.objects.filter(enabled=True):
-        channels = list(
-            GeoServerPublishChannel.objects.filter(active=True, geoserver_pool=pool).select_related(
-                'publish_entry', 'workspace'
-            )
-        )
+        channels = GeoServerPublishChannel.objects.filter(active=True, geoserver_pool=pool)
+        if level is not None:
+            channels = channels.filter(health_check_level=level)
+        channels = list(channels)
         if not channels:
             continue
 
-        targets = pool.targets()
-        for target in targets:
-            target_text = target.cluster_name or pool.name or str(pool.id)
-            try:
-                geoserver_obj = geoserverWithCustomCreds(target.url, target.username, target.password)
-                layer_names = {layer['name'] for layer in geoserver_obj.get_layers()}
-                list_error = None
-            except Exception as e:
-                log.error(f"Unable to get the layer list from GeoServer [{target_text}]: {e}")
-                layer_names = set()
-                list_error = f"Could not get the layer list from {target_text}: {e}"
-
-            for channel in channels:
-                layer_name = channel.layer_name_with_workspace
-                if list_error:
-                    health_status = GeoServerLayerHealthcheck.UNHEALTHY
-                    error_message = list_error
-                elif layer_name in layer_names or (
-                    not channel.workspace and any(name.split(':')[-1] == layer_name for name in layer_names)
-                ):
-                    health_status = GeoServerLayerHealthcheck.HEALTHY
-                    error_message = None
-                else:
-                    health_status = GeoServerLayerHealthcheck.UNHEALTHY
-                    error_message = f"Layer not found on {target_text}"
-
-                GeoServerLayerHealthcheck.objects.update_or_create(
-                    geoserver_publish_channel=channel,
-                    cluster_name=target.cluster_name,
-                    defaults={
-                        'layer_name': layer_name,
-                        'health_status': health_status,
-                        'error_message': error_message,
-                        'last_check_time': timezone.now()
-                    }
-                )
-
-        # Delete stale records: a different layer name (e.g. before a workspace was configured
-        # on the channel) or a cluster node that is no longer a target (disabled or removed)
-        target_cluster_names = [target.cluster_name for target in targets]
+        started_at = time.monotonic()
+        geoserver_obj = geoserverWithCustomCreds(pool.health_check_url or pool.url, pool.username, pool.password)
+        unhealthy_count = 0
+        failures_in_a_row = 0
         for channel in channels:
-            GeoServerLayerHealthcheck.objects.filter(geoserver_publish_channel=channel).exclude(
-                layer_name=channel.layer_name_with_workspace,
-                cluster_name__in=target_cluster_names,
-            ).delete()
+            layer_name = channel.layer_name_with_workspace
+            checked_url = ""
+            if failures_in_a_row >= _HEALTH_CHECK_MAX_FAILURES_IN_A_ROW:
+                # Do not wait for the timeout again for every remaining layer
+                error_message = "GeoServer stopped answering, so the layer was not checked"
+            else:
+                try:
+                    error_message, checked_url = geoserver_obj.check_layer_map(layer_name)
+                    failures_in_a_row = 0
+                except httpx.TransportError as e:
+                    failures_in_a_row += 1
+                    error_message = f"Could not reach GeoServer: {type(e).__name__}: {e}"
+                    try:
+                        checked_url = str(e.request.url)
+                    except RuntimeError:
+                        # The exception has no request
+                        pass
+                except Exception as e:
+                    failures_in_a_row = 0
+                    error_message = f"{type(e).__name__}: {e}"
+
+            if error_message:
+                unhealthy_count += 1
+                log.warning(f"Layer health check: [{layer_name}] is unhealthy: {error_message}")
+            _save_layer_health_check(channel, layer_name, error_message, checked_url)
+
+        level_text = HealthCheckLevel(level).label if level is not None else 'all levels'
+        log.info(
+            f"Layer health check of pool [{pool}] ({level_text}) via [{geoserver_obj.service_url}]: {len(channels)} checked, "
+            f"{unhealthy_count} unhealthy, {time.monotonic() - started_at:.1f} s"
+        )
+
+
+# After this many connection errors or timeouts in a row, the remaining layers of the pool are not checked.
+_HEALTH_CHECK_MAX_FAILURES_IN_A_ROW = 3
+
+
+def _save_layer_health_check(
+    channel: GeoServerPublishChannel, layer_name: str, error_message: Optional[str], checked_url: str
+) -> None:
+    """Saves the health check result of a channel, but only when the result has changed.
+
+    A save writes a django-reversion version. When the result is the same as last time,
+    only the check time and the checked URL are updated with update(), which does not write
+    a version (the URL changes every time because the small map area is random).
+    """
+    health_status = GeoServerLayerHealthcheck.UNHEALTHY if error_message else GeoServerLayerHealthcheck.HEALTHY
+    now = timezone.now()
+
+    # Delete stale records: a different layer name (e.g. before a workspace was configured on the
+    # channel) or a record per cluster from the earlier per-cluster check
+    GeoServerLayerHealthcheck.objects.filter(geoserver_publish_channel=channel).exclude(
+        layer_name=layer_name,
+        cluster_name="",
+    ).delete()
+
+    record = GeoServerLayerHealthcheck.objects.filter(geoserver_publish_channel=channel).first()
+    if record and record.health_status == health_status and record.error_message == error_message:
+        GeoServerLayerHealthcheck.objects.filter(pk=record.pk).update(last_check_time=now, checked_url=checked_url)
+        return
+
+    GeoServerLayerHealthcheck.objects.update_or_create(
+        geoserver_publish_channel=channel,
+        cluster_name="",
+        defaults={
+            'layer_name': layer_name,
+            'health_status': health_status,
+            'error_message': error_message,
+            'last_check_time': now,
+            'checked_url': checked_url,
+        }
+    )
+
+
+def get_unhealthy_channels(levels: Optional[list[int]] = None) -> models.QuerySet:
+    """Returns the active channels with an enabled pool whose last health check failed.
+
+    Used by the Layer Health menu badge and the layer health API, so both count the same way.
+
+    Args:
+        levels (Optional[list[int]]): HealthCheckLevel values to include. None or empty includes all.
+    """
+    channels = GeoServerPublishChannel.objects.filter(
+        active=True,
+        geoserver_pool__enabled=True,
+        health_checks__health_status=GeoServerLayerHealthcheck.UNHEALTHY,
+    )
+    if levels:
+        channels = channels.filter(health_check_level__in=levels)
+    return channels.distinct()

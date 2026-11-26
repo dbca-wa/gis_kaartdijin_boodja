@@ -262,7 +262,8 @@ class ManagementCommands(viewsets.ViewSet):
     @decorators.action(detail=False, methods=["POST"])
     def perform_geoserver_layer_healthcheck(self, request: request.Request) -> response.Response:
         try:
-            management.call_command("runcrons", "govapp.apps.publisher.cron.GeoServerLayerHealthcheckCronJob", "--force")
+            # All health check levels, so every layer is checked once
+            management.call_command("geoserver_layer_health_check")
         except Exception as exc:
             log.error(f"Unable to perform scan: {exc}")
 

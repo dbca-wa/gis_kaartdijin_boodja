@@ -13,6 +13,7 @@
                     <input type="hidden" name="geoserver_publish_channel_id" id="geoserver_publish_channel_id" value=""/>
                     <input type="hidden" name="expire_server_cache_after_n_seconds_default" id="expire_server_cache_after_n_seconds_default" value="{{ expire_server_cache_after_n_seconds_default }}"/>
                     <input type="hidden" name="expire_client_cache_after_n_seconds_default" id="expire_client_cache_after_n_seconds_default" value="{{ expire_client_cache_after_n_seconds_default }}"/>
+                    <input type="hidden" name="health_check_level_default" id="health_check_level_default" value="{{ health_check_level_default }}"/>
                     <form>
                          <div class='row align-items-center mb-3'>
                               <div class='col-2 text-end'>
@@ -71,6 +72,18 @@
                                    <div class="form-check form-switch">
                                         <input class="form-check-input" type="checkbox" role="switch" id="new-publish-active" checked>
                                    </div>
+                              </div>
+                         </div>
+                         <div class='row align-items-center mb-3'>
+                              <div class='col-2 text-end'>
+                                   <label for="new-publish-health-check-level" class="form-label mb-0">Health Check Level</label>
+                              </div>
+                              <div class='col-4'>
+                                   <select class="form-control" id="new-publish-health-check-level">
+                                   {% for id, label in health_check_levels.items %}
+                                        <option value="{{ id }}">{{ label }}</option>
+                                   {% endfor %}
+                                   </select>
                               </div>
                          </div>
                          <div class='row align-items-center mb-3'>

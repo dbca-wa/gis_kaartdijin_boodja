@@ -40,7 +40,7 @@ from govapp.apps.accounts import utils
 from typing import Any
 
 from govapp.apps.publisher.models.geoserver_pools import GeoServerPool, GeoServerGroup, GeoServerGroupUser
-from govapp.apps.publisher.models.publish_channels import GeoServerPublishChannel, StoreType
+from govapp.apps.publisher.models.publish_channels import GeoServerLayerHealthcheck, GeoServerPublishChannel, HealthCheckLevel, StoreType
 from govapp.apps.publisher import geoserver_manager
 
 UserModel = auth.get_user_model()
@@ -299,6 +299,8 @@ class PublishView(base.TemplateView):
         context['geoserver_pools'] = geoserver_pools
         context['geoserver_pool_list_json'] = json.dumps(geoserver_pool_list)
         context['store_types'] = store_types
+        context['health_check_levels'] = dict(HealthCheckLevel.choices)
+        context['health_check_level_default'] = HealthCheckLevel.NON_CRITICAL.value
 
         context['expire_server_cache_after_n_seconds_default'] = settings.EXPIRE_SERVER_CACHE_AFTER_N_SECONDS_DEFAULT
         context['expire_client_cache_after_n_seconds_default'] = settings.EXPIRE_CLIENT_CACHE_AFTER_N_SECONDS_DEFAULT
@@ -714,6 +716,19 @@ class GeoServerGroupsView(base.TemplateView):
 
 class GeoServerLayerHealthcheckView(base.TemplateView):
     template_name = "govapp/geoserver_layer_healthcheck.html"
+
+    def get_context_data(self, **kwargs: Any) -> dict[str, Any]:
+        context = super().get_context_data(**kwargs)
+        # Choices for the level and status filters on the page. Unknown is only the default
+        # value of the field: the health check always saves Healthy or Unhealthy.
+        context['health_check_levels'] = HealthCheckLevel.choices
+        # (value, label, ticked at first, badge class as in the Health Status column):
+        # show only the unhealthy layers at first
+        context['health_statuses'] = [
+            (GeoServerLayerHealthcheck.HEALTHY, 'Healthy', False, 'bg-success'),
+            (GeoServerLayerHealthcheck.UNHEALTHY, 'Unhealthy', True, 'bg-danger'),
+        ]
+        return context
 
 
 class GeoServerGroupView(base.TemplateView):

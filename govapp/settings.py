@@ -334,12 +334,14 @@ POSTGRES_SCANNER_PERIOD_MINS = decouple.config('POSTGRES_SCANNER_PERIOD_MINS', d
 SHAREPOINT_SCANNER_PERIOD_MINS = decouple.config('SHAREPOINT_SCANNER_PERIOD_MINS', default=2, cast=int)
 DIRECTORY_SCANNER_PERIOD_MINS = decouple.config('DIRECTORY_SCANNER_PERIOD_MINS', default=2, cast=int)
 PUBLISH_GEOSERVER_QUEUE_PERIOD_MINS = decouple.config('PUBLISH_GEOSERVER_QUEUE_PERIOD_MINS', default=2, cast=int)
-GEOSERVER_LAYER_HEALTH_CHECK_TIMES = decouple.config(
-    'GEOSERVER_LAYER_HEALTH_CHECK_TIMES',
-    default='08:00,11:00,14:00,16:00',  # Perth time, ~4x/day
+# Layer health check intervals per health check level of the publish channel
+GEOSERVER_LAYER_HEALTH_CHECK_CRITICAL_PERIOD_MINS = decouple.config('GEOSERVER_LAYER_HEALTH_CHECK_CRITICAL_PERIOD_MINS', default=5, cast=int)
+GEOSERVER_LAYER_HEALTH_CHECK_BUSINESS_HOURS_PERIOD_MINS = decouple.config('GEOSERVER_LAYER_HEALTH_CHECK_BUSINESS_HOURS_PERIOD_MINS', default=60, cast=int)
+GEOSERVER_LAYER_HEALTH_CHECK_NON_CRITICAL_TIMES = decouple.config(
+    'GEOSERVER_LAYER_HEALTH_CHECK_NON_CRITICAL_TIMES',
+    default='06:00,19:30',  # Perth time
     cast=lambda v: [t.strip() for t in v.split(',')]
 )
-# .env example: GEOSERVER_LAYER_HEALTH_CHECK_TIMES=08:00,11:00,14:00,16:00
 GEOSERVER_SYNC_LAYERS_PERIOD_MINS = decouple.config('GEOSERVER_SYNC_LAYERS_PERIOD_MINS', default=1, cast=int)
 GEOSERVER_SYNC_RULES_PERIOD_MINS = decouple.config('GEOSERVER_SYNC_RULES_PERIOD_MINS', default=2, cast=int)
 GEOSERVER_SYNC_USERS_PERIOD_MINS = decouple.config('GEOSERVER_SYNC_USERS_PERIOD_MINS', default=2, cast=int)
@@ -360,7 +362,9 @@ CRON_CLASSES = [
     "govapp.apps.catalogue.cron.PendingImportsCleanupCronJob",
     "govapp.apps.publisher.cron.PublishGeoServerQueueCronJob",
     "govapp.apps.publisher.cron.PublishGeoServerReadyToPublishCronJob",
-    "govapp.apps.publisher.cron.GeoServerLayerHealthcheckCronJob",
+    "govapp.apps.publisher.cron.GeoServerLayerHealthcheckCriticalCronJob",
+    "govapp.apps.publisher.cron.GeoServerLayerHealthcheckBusinessHoursCronJob",
+    "govapp.apps.publisher.cron.GeoServerLayerHealthcheckNonCriticalCronJob",
     "govapp.apps.publisher.cron.GeoServerSyncLayersCronJob", # layers
     "govapp.apps.publisher.cron.GeoServerSyncRulesCronJob", # rules
     "govapp.apps.accounts.cron.GeoServerSyncUsersCronJob", # users
