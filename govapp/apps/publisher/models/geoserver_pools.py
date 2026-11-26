@@ -41,6 +41,16 @@ class GeoServerPool(mixins.RevisionedMixin):
     name = models.CharField(max_length=200, null=True)
     url = models.CharField(max_length=500)
     url_ui = models.URLField(null=True, blank=True)
+    health_check_url = models.URLField(
+        max_length=500,
+        blank=True,
+        default="",
+        help_text=(
+            "GeoServer URL used by the layer health check to get each layer as a user would "
+            "(WMS with basic auth), e.g. https://kb-api.dbca.wa.gov.au/geoserver. "
+            "Leave blank to use the URL above."
+        ),
+    )
     username = models.TextField()
     password = models.TextField()
     enabled = models.BooleanField(default=True)

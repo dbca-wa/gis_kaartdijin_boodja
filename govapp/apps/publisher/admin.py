@@ -164,9 +164,10 @@ class GeoServerPublishChannelAdmin(reversion.admin.VersionAdmin):
         'llb_crs',
         'create_cached_layer',
         'expire_server_cache_after_n_seconds',
-        'expire_client_cache_after_n_seconds'
+        'expire_client_cache_after_n_seconds',
+        'health_check_level',
     )
-    list_filter = ('geoserver_pool', 'store_type', 'mode', 'frequency', 'workspace', 'active', 'create_cached_layer',)
+    list_filter = ('geoserver_pool', 'store_type', 'mode', 'frequency', 'workspace', 'active', 'create_cached_layer', 'health_check_level',)
     raw_id_fields = ('publish_entry',)
 
     def publish_entry_link(self, obj):

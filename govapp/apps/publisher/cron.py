@@ -28,15 +28,37 @@ class PublishGeoServerQueueCronJob(django_cron.CronJobBase):
         management.call_command("geoserver_execute_queue")
 
 
-class GeoServerLayerHealthcheckCronJob(django_cron.CronJobBase):
-    schedule = django_cron.Schedule(run_at_times=conf.settings.GEOSERVER_LAYER_HEALTH_CHECK_TIMES)
-    code = 'geoserver.publisher.geoserver_layer_health_check_cron_job'
+class GeoServerLayerHealthcheckCriticalCronJob(django_cron.CronJobBase):
+    schedule = django_cron.Schedule(run_every_mins=conf.settings.GEOSERVER_LAYER_HEALTH_CHECK_CRITICAL_PERIOD_MINS)
+    code = 'geoserver.publisher.geoserver_layer_health_check_critical_cron_job'
 
     def do(self):
-        log.info("Geoserver layer healthcheck cron job triggered, running...")
+        log.info("Geoserver layer healthcheck (critical) cron job triggered, running...")
 
         # Run Management Command
-        management.call_command("geoserver_layer_health_check")
+        management.call_command("geoserver_layer_health_check", level="critical")
+
+
+class GeoServerLayerHealthcheckBusinessHoursCronJob(django_cron.CronJobBase):
+    schedule = django_cron.Schedule(run_every_mins=conf.settings.GEOSERVER_LAYER_HEALTH_CHECK_BUSINESS_HOURS_PERIOD_MINS)
+    code = 'geoserver.publisher.geoserver_layer_health_check_business_hours_cron_job'
+
+    def do(self):
+        log.info("Geoserver layer healthcheck (business hours) cron job triggered, running...")
+
+        # Run Management Command
+        management.call_command("geoserver_layer_health_check", level="business_hours")
+
+
+class GeoServerLayerHealthcheckNonCriticalCronJob(django_cron.CronJobBase):
+    schedule = django_cron.Schedule(run_at_times=conf.settings.GEOSERVER_LAYER_HEALTH_CHECK_NON_CRITICAL_TIMES)
+    code = 'geoserver.publisher.geoserver_layer_health_check_non_critical_cron_job'
+
+    def do(self):
+        log.info("Geoserver layer healthcheck (non critical) cron job triggered, running...")
+
+        # Run Management Command
+        management.call_command("geoserver_layer_health_check", level="non_critical")
 
 
 class GeoServerSyncLayersCronJob(django_cron.CronJobBase):  # layers

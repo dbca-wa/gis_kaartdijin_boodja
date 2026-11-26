@@ -2,8 +2,10 @@
 
 
 # Standard
+import html
 import json
 import logging
+import re
 import pathlib
 import requests
 import time
@@ -42,6 +44,27 @@ def _mask_secrets(obj: Any) -> None:
     elif isinstance(obj, list):
         for item in obj:
             _mask_secrets(item)
+
+
+# Timeout of each request made by the layer health check.
+HEALTH_CHECK_TIMEOUT_SECONDS = 30.0
+
+
+def _response_error_text(response: httpx.Response) -> str:
+    """Returns a short error text for an unexpected GeoServer response."""
+    text = f"HTTP {response.status_code}"
+    location = response.headers.get("location")
+    if location:
+        text += f" (redirect to {location})"
+    body = response.text.strip()
+    # For a WMS ServiceException, keep only the exception text: the XML declaration and
+    # DOCTYPE would otherwise fill most of the 300 characters
+    exceptions = re.findall(r"<ServiceException(?:\s[^>]*)?>(.*?)</ServiceException>", body, flags=re.DOTALL)
+    if exceptions:
+        body = " ".join(html.unescape(" ".join(exception.split())) for exception in exceptions)
+    if body:
+        text += f": {body[:300]}"
+    return text
 
 
 def _data_for_log(data: str) -> str:
@@ -1463,6 +1486,86 @@ class GeoServer:
         # Return JSON
         # return json_response['layer']
         return json_response
+
+    def check_layer_map(self, layer_name: str) -> Optional[str]:
+        """Checks that a user can get a small map of a layer from GeoServer.
+
+        Reads the layer bounds with the REST API, then requests a 64x64 PNG of 1% of the
+        layer's width and height around its centre with WMS GetMap. GeoServer reads and
+        renders only that small area, so the request stays light whatever the layer size.
+        An empty image (no features in the small area) still means the data was read.
+
+        Args:
+            layer_name (str): Layer name with the workspace, e.g. "workspace:layer".
+
+        Returns:
+            Optional[str]: None if GeoServer returned the map, otherwise the error text.
+
+        Raises:
+            httpx.TransportError: If GeoServer cannot be reached or does not answer in time.
+        """
+        auth = (self.username, self.password)
+
+        # Layer details: the link to the resource (feature type, coverage, ...)
+        response = httpx.get(
+            url=f"{self.service_url}/rest/layers/{layer_name}.json",
+            auth=auth,
+            headers=self.headers_json,
+            timeout=HEALTH_CHECK_TIMEOUT_SECONDS,
+        )
+        if response.status_code == 404:
+            return "Layer not found in GeoServer"
+        if response.status_code != 200:
+            return _response_error_text(response)
+        resource_href = response.json()["layer"]["resource"]["href"]
+
+        # Resource: the bounds. Use only the path of the link, because GeoServer may build
+        # the link with another host (its proxy base URL).
+        resource_path = resource_href[resource_href.index("/rest/"):]
+        response = httpx.get(
+            url=f"{self.service_url}{resource_path}",
+            auth=auth,
+            headers=self.headers_json,
+            timeout=HEALTH_CHECK_TIMEOUT_SECONDS,
+        )
+        if response.status_code != 200:
+            return _response_error_text(response)
+        # The JSON has one top-level key: featureType, coverage, wmsLayer, ...
+        resource = next(iter(response.json().values()))
+        bounds = resource.get("latLonBoundingBox")
+        if not bounds:
+            return "The layer has no lat/lon bounds in GeoServer"
+
+        # Small bounding box: 1% of the width and height around the centre, at least 0.0001 degrees
+        centre_x = (bounds["minx"] + bounds["maxx"]) / 2
+        centre_y = (bounds["miny"] + bounds["maxy"]) / 2
+        half_width = max((bounds["maxx"] - bounds["minx"]) * 0.005, 0.00005)
+        half_height = max((bounds["maxy"] - bounds["miny"]) * 0.005, 0.00005)
+        bbox = f"{centre_x - half_width},{centre_y - half_height},{centre_x + half_width},{centre_y + half_height}"
+
+        # WMS 1.1.1 keeps the lon/lat axis order for EPSG:4326
+        response = httpx.get(
+            url=f"{self.service_url}/wms",
+            params={
+                "service": "WMS",
+                "version": "1.1.1",
+                "request": "GetMap",
+                "layers": layer_name,
+                "styles": "",
+                "srs": "EPSG:4326",
+                "bbox": bbox,
+                "width": 64,
+                "height": 64,
+                "format": "image/png",
+                "transparent": "true",
+            },
+            auth=auth,
+            timeout=HEALTH_CHECK_TIMEOUT_SECONDS,
+        )
+        # GeoServer can return a ServiceException XML with HTTP 200, so check the content type too
+        if response.status_code != 200 or not response.headers.get("content-type", "").startswith("image/png"):
+            return _response_error_text(response)
+        return None
 
     @handle_http_exceptions(log)
     def delete_layer(self, layer_name) -> None:
