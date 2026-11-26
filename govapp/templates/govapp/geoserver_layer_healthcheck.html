@@ -126,6 +126,25 @@
                         {
                             "data": "error_message",
                             "title": "Error Message"
+                        },
+                        {
+                            "data": "checked_url",
+                            "title": "Checked URL",
+                            "orderable": false,
+                            "searchable": false,
+                            "render": function(row, type, full){
+                                // Last request of the check, to try the same request in the browser
+                                if (!row) {
+                                    return '-'
+                                }
+                                let link = document.createElement('a');
+                                link.href = row;
+                                link.target = '_blank';
+                                link.style.textDecoration = 'none';
+                                link.textContent = 'Open';
+                                link.title = row;
+                                return link.outerHTML;
+                            }
                         }
                     ],
                     "paging": true,

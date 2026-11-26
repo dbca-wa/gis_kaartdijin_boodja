@@ -7,6 +7,7 @@ import json
 import logging
 import re
 import pathlib
+import random
 import requests
 import time
 from django.template import loader
@@ -16,7 +17,7 @@ from django import conf
 import httpx
 
 # Typing
-from typing import Any, Optional
+from typing import Any, NamedTuple, Optional
 from django.template.loader import render_to_string
 
 from govapp import settings
@@ -48,6 +49,12 @@ def _mask_secrets(obj: Any) -> None:
 
 # Timeout of each request made by the layer health check.
 HEALTH_CHECK_TIMEOUT_SECONDS = 30.0
+
+
+class LayerMapCheckResult(NamedTuple):
+    """Result of GeoServer.check_layer_map()."""
+    error: Optional[str]  # None if GeoServer returned the map
+    url: str  # URL of the last request sent (credentials are sent in a header, not in the URL)
 
 
 def _response_error_text(response: httpx.Response) -> str:
@@ -1487,66 +1494,64 @@ class GeoServer:
         # return json_response['layer']
         return json_response
 
-    def check_layer_map(self, layer_name: str) -> Optional[str]:
+    def check_layer_map(self, layer_name: str) -> "LayerMapCheckResult":
         """Checks that a user can get a small map of a layer from GeoServer.
 
         Reads the layer bounds with the REST API, then requests a 64x64 PNG of 1% of the
-        layer's width and height around its centre with WMS GetMap. GeoServer reads and
-        renders only that small area, so the request stays light whatever the layer size.
-        An empty image (no features in the small area) still means the data was read.
+        layer's width and height with WMS GetMap. GeoServer reads and renders only that small
+        area, so the request stays light whatever the layer size. An empty image (no features
+        in the small area) still means the data was read.
+
+        To avoid an answer from a cache instead of the data, every request asks for no cache,
+        and the small area is at a random place in the middle half of the layer's bounds.
 
         Args:
             layer_name (str): Layer name with the workspace, e.g. "workspace:layer".
 
         Returns:
-            Optional[str]: None if GeoServer returned the map, otherwise the error text.
+            LayerMapCheckResult: The error text (None if GeoServer returned the map) and the
+                URL of the last request sent.
 
         Raises:
             httpx.TransportError: If GeoServer cannot be reached or does not answer in time.
         """
         auth = (self.username, self.password)
+        no_cache = {"Cache-Control": "no-cache"}
+        url = ""
+        try:
+            # Layer details: the link to the resource (feature type, coverage, ...)
+            url = f"{self.service_url}/rest/layers/{layer_name}.json"
+            response = httpx.get(url=url, auth=auth, headers={**self.headers_json, **no_cache}, timeout=HEALTH_CHECK_TIMEOUT_SECONDS)
+            if response.status_code == 404:
+                return LayerMapCheckResult("Layer not found in GeoServer", url)
+            if response.status_code != 200:
+                return LayerMapCheckResult(_response_error_text(response), url)
+            resource_href = response.json()["layer"]["resource"]["href"]
 
-        # Layer details: the link to the resource (feature type, coverage, ...)
-        response = httpx.get(
-            url=f"{self.service_url}/rest/layers/{layer_name}.json",
-            auth=auth,
-            headers=self.headers_json,
-            timeout=HEALTH_CHECK_TIMEOUT_SECONDS,
-        )
-        if response.status_code == 404:
-            return "Layer not found in GeoServer"
-        if response.status_code != 200:
-            return _response_error_text(response)
-        resource_href = response.json()["layer"]["resource"]["href"]
+            # Resource: the bounds. Use only the path of the link, because GeoServer may build
+            # the link with another host (its proxy base URL).
+            url = f"{self.service_url}{resource_href[resource_href.index('/rest/'):]}"
+            response = httpx.get(url=url, auth=auth, headers={**self.headers_json, **no_cache}, timeout=HEALTH_CHECK_TIMEOUT_SECONDS)
+            if response.status_code != 200:
+                return LayerMapCheckResult(_response_error_text(response), url)
+            # The JSON has one top-level key: featureType, coverage, wmsLayer, ...
+            resource = next(iter(response.json().values()))
+            bounds = resource.get("latLonBoundingBox")
+            if not bounds:
+                return LayerMapCheckResult("The layer has no lat/lon bounds in GeoServer", url)
 
-        # Resource: the bounds. Use only the path of the link, because GeoServer may build
-        # the link with another host (its proxy base URL).
-        resource_path = resource_href[resource_href.index("/rest/"):]
-        response = httpx.get(
-            url=f"{self.service_url}{resource_path}",
-            auth=auth,
-            headers=self.headers_json,
-            timeout=HEALTH_CHECK_TIMEOUT_SECONDS,
-        )
-        if response.status_code != 200:
-            return _response_error_text(response)
-        # The JSON has one top-level key: featureType, coverage, wmsLayer, ...
-        resource = next(iter(response.json().values()))
-        bounds = resource.get("latLonBoundingBox")
-        if not bounds:
-            return "The layer has no lat/lon bounds in GeoServer"
+            # Small bounding box: 1% of the width and height (at least 0.0001 degrees), at a random
+            # place in the middle half of the bounds, so it always stays inside the bounds
+            width = bounds["maxx"] - bounds["minx"]
+            height = bounds["maxy"] - bounds["miny"]
+            centre_x = (bounds["minx"] + bounds["maxx"]) / 2 + random.uniform(-0.25, 0.25) * width
+            centre_y = (bounds["miny"] + bounds["maxy"]) / 2 + random.uniform(-0.25, 0.25) * height
+            half_width = max(width * 0.005, 0.00005)
+            half_height = max(height * 0.005, 0.00005)
+            bbox = f"{centre_x - half_width},{centre_y - half_height},{centre_x + half_width},{centre_y + half_height}"
 
-        # Small bounding box: 1% of the width and height around the centre, at least 0.0001 degrees
-        centre_x = (bounds["minx"] + bounds["maxx"]) / 2
-        centre_y = (bounds["miny"] + bounds["maxy"]) / 2
-        half_width = max((bounds["maxx"] - bounds["minx"]) * 0.005, 0.00005)
-        half_height = max((bounds["maxy"] - bounds["miny"]) * 0.005, 0.00005)
-        bbox = f"{centre_x - half_width},{centre_y - half_height},{centre_x + half_width},{centre_y + half_height}"
-
-        # WMS 1.1.1 keeps the lon/lat axis order for EPSG:4326
-        response = httpx.get(
-            url=f"{self.service_url}/wms",
-            params={
+            # WMS 1.1.1 keeps the lon/lat axis order for EPSG:4326
+            url = str(httpx.URL(f"{self.service_url}/wms", params={
                 "service": "WMS",
                 "version": "1.1.1",
                 "request": "GetMap",
@@ -1558,14 +1563,17 @@ class GeoServer:
                 "height": 64,
                 "format": "image/png",
                 "transparent": "true",
-            },
-            auth=auth,
-            timeout=HEALTH_CHECK_TIMEOUT_SECONDS,
-        )
-        # GeoServer can return a ServiceException XML with HTTP 200, so check the content type too
-        if response.status_code != 200 or not response.headers.get("content-type", "").startswith("image/png"):
-            return _response_error_text(response)
-        return None
+            }))
+            response = httpx.get(url=url, auth=auth, headers=no_cache, timeout=HEALTH_CHECK_TIMEOUT_SECONDS)
+            # GeoServer can return a ServiceException XML with HTTP 200, so check the content type too
+            if response.status_code != 200 or not response.headers.get("content-type", "").startswith("image/png"):
+                return LayerMapCheckResult(_response_error_text(response), url)
+            return LayerMapCheckResult(None, url)
+        except httpx.TransportError:
+            raise
+        except Exception as e:
+            # e.g. an unexpected JSON answer
+            return LayerMapCheckResult(f"{type(e).__name__}: {e}", url)
 
     @handle_http_exceptions(log)
     def delete_layer(self, layer_name) -> None:

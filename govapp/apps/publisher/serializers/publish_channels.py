@@ -141,6 +141,7 @@ class GeoServerLayerHealthcheckSerializer(serializers.ModelSerializer):
             'health_status_str',
             'last_check_time',
             'error_message',
+            'checked_url',
             'geoserver_pool_name',
             'geoserver_pool_url',
             'publish_entry_id',

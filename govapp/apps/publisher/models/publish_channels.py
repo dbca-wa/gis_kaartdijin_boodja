@@ -677,6 +677,8 @@ class GeoServerLayerHealthcheck(mixins.RevisionedMixin):
     error_message = models.TextField(blank=True, null=True)
     # Name of the cluster node checked (GeoServerPool.targets()); blank for a pool without named nodes.
     cluster_name = models.CharField(max_length=100, blank=True, default="")
+    # URL of the last request of the last check, to see what was checked (no credentials in it)
+    checked_url = models.TextField(blank=True, default="")
 
     class Meta:
         constraints = [
@@ -725,16 +727,22 @@ def _perform_geoserver_layer_health_checks(level: Optional[int]) -> None:
         failures_in_a_row = 0
         for channel in channels:
             layer_name = channel.layer_name_with_workspace
+            checked_url = ""
             if failures_in_a_row >= _HEALTH_CHECK_MAX_FAILURES_IN_A_ROW:
                 # Do not wait for the timeout again for every remaining layer
                 error_message = "GeoServer stopped answering, so the layer was not checked"
             else:
                 try:
-                    error_message = geoserver_obj.check_layer_map(layer_name)
+                    error_message, checked_url = geoserver_obj.check_layer_map(layer_name)
                     failures_in_a_row = 0
                 except httpx.TransportError as e:
                     failures_in_a_row += 1
                     error_message = f"Could not reach GeoServer: {type(e).__name__}: {e}"
+                    try:
+                        checked_url = str(e.request.url)
+                    except RuntimeError:
+                        # The exception has no request
+                        pass
                 except Exception as e:
                     failures_in_a_row = 0
                     error_message = f"{type(e).__name__}: {e}"
@@ -742,11 +750,11 @@ def _perform_geoserver_layer_health_checks(level: Optional[int]) -> None:
             if error_message:
                 unhealthy_count += 1
                 log.warning(f"Layer health check: [{layer_name}] is unhealthy: {error_message}")
-            _save_layer_health_check(channel, layer_name, error_message)
+            _save_layer_health_check(channel, layer_name, error_message, checked_url)
 
         level_text = HealthCheckLevel(level).label if level is not None else 'all levels'
         log.info(
-            f"Layer health check of pool [{pool}] ({level_text}): {len(channels)} checked, "
+            f"Layer health check of pool [{pool}] ({level_text}) via [{geoserver_obj.service_url}]: {len(channels)} checked, "
             f"{unhealthy_count} unhealthy, {time.monotonic() - started_at:.1f} s"
         )
 
@@ -755,11 +763,14 @@ def _perform_geoserver_layer_health_checks(level: Optional[int]) -> None:
 _HEALTH_CHECK_MAX_FAILURES_IN_A_ROW = 3
 
 
-def _save_layer_health_check(channel: GeoServerPublishChannel, layer_name: str, error_message: Optional[str]) -> None:
+def _save_layer_health_check(
+    channel: GeoServerPublishChannel, layer_name: str, error_message: Optional[str], checked_url: str
+) -> None:
     """Saves the health check result of a channel, but only when the result has changed.
 
     A save writes a django-reversion version. When the result is the same as last time,
-    only the check time is updated with update(), which does not write a version.
+    only the check time and the checked URL are updated with update(), which does not write
+    a version (the URL changes every time because the small map area is random).
     """
     health_status = GeoServerLayerHealthcheck.UNHEALTHY if error_message else GeoServerLayerHealthcheck.HEALTHY
     now = timezone.now()
@@ -773,7 +784,7 @@ def _save_layer_health_check(channel: GeoServerPublishChannel, layer_name: str, 
 
     record = GeoServerLayerHealthcheck.objects.filter(geoserver_publish_channel=channel).first()
     if record and record.health_status == health_status and record.error_message == error_message:
-        GeoServerLayerHealthcheck.objects.filter(pk=record.pk).update(last_check_time=now)
+        GeoServerLayerHealthcheck.objects.filter(pk=record.pk).update(last_check_time=now, checked_url=checked_url)
         return
 
     GeoServerLayerHealthcheck.objects.update_or_create(
@@ -784,6 +795,7 @@ def _save_layer_health_check(channel: GeoServerPublishChannel, layer_name: str, 
             'health_status': health_status,
             'error_message': error_message,
             'last_check_time': now,
+            'checked_url': checked_url,
         }
     )
 
