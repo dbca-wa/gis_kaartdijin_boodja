@@ -62,6 +62,7 @@ class GeoServerPublishChannelSerializer(serializers.ModelSerializer):
     layer_name_with_workspace = serializers.ReadOnlyField()
     geoserver_pool_url_ui = serializers.SerializerMethodField()
     store_type_name = serializers.ReadOnlyField(source='get_store_type_display')
+    health_check_level_name = serializers.ReadOnlyField(source='get_health_check_level_display')
     published_at = serializers.SerializerMethodField()
     layer_groups = serializers.SerializerMethodField()
     

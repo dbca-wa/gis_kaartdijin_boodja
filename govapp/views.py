@@ -40,7 +40,7 @@ from govapp.apps.accounts import utils
 from typing import Any
 
 from govapp.apps.publisher.models.geoserver_pools import GeoServerPool, GeoServerGroup, GeoServerGroupUser
-from govapp.apps.publisher.models.publish_channels import GeoServerPublishChannel, StoreType
+from govapp.apps.publisher.models.publish_channels import GeoServerPublishChannel, HealthCheckLevel, StoreType
 from govapp.apps.publisher import geoserver_manager
 
 UserModel = auth.get_user_model()
@@ -299,6 +299,8 @@ class PublishView(base.TemplateView):
         context['geoserver_pools'] = geoserver_pools
         context['geoserver_pool_list_json'] = json.dumps(geoserver_pool_list)
         context['store_types'] = store_types
+        context['health_check_levels'] = dict(HealthCheckLevel.choices)
+        context['health_check_level_default'] = HealthCheckLevel.NON_CRITICAL.value
 
         context['expire_server_cache_after_n_seconds_default'] = settings.EXPIRE_SERVER_CACHE_AFTER_N_SECONDS_DEFAULT
         context['expire_client_cache_after_n_seconds_default'] = settings.EXPIRE_CLIENT_CACHE_AFTER_N_SECONDS_DEFAULT

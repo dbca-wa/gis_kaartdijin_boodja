@@ -68,7 +68,8 @@ var kbpublish = {
         ftp_servers: [],
 
         expire_server_cache_after_n_seconds_default: null,
-        expire_client_cache_after_n_seconds_default: null
+        expire_client_cache_after_n_seconds_default: null,
+        health_check_level_default: null
     },
     variable: {
         overlay_checkmark: $('<div class="overlay">' +
@@ -297,6 +298,7 @@ var kbpublish = {
     init_publish_item: function() {    
         kbpublish.var.expire_server_cache_after_n_seconds_default = $('#expire_server_cache_after_n_seconds_default').val()
         kbpublish.var.expire_client_cache_after_n_seconds_default = $('#expire_client_cache_after_n_seconds_default').val()
+        kbpublish.var.health_check_level_default = $('#health_check_level_default').val()
 
         $.ajax({
             url: kbpublish.var.ftp_server_url,
@@ -744,6 +746,7 @@ var kbpublish = {
         let create_cached_layer = $('#new-publish-create-cached-layer').is(':checked');
         let expire_server_cache_after_n_seconds = $('#expire-server-cache-after-n-seconds').val();
         let expire_client_cache_after_n_seconds = $('#expire-client-cache-after-n-seconds').val();
+        let health_check_level = $('#new-publish-health-check-level').val();
 
         // 2. Validate data
         let errors = [];
@@ -841,7 +844,8 @@ var kbpublish = {
             llb_crs,
             create_cached_layer,
             expire_server_cache_after_n_seconds,
-            expire_client_cache_after_n_seconds
+            expire_client_cache_after_n_seconds,
+            health_check_level
         };
 
         // 4. Prepare for sending data
@@ -880,6 +884,7 @@ var kbpublish = {
         $('#llb-maxy').attr('disabled','disabled');
         $('#llb-crs').attr('disabled','disabled');
         $('#new-publish-create-cached-layer').attr('disabled','disabled');
+        $('#new-publish-health-check-level').attr('disabled','disabled');
         $('#expire-server-cache-after-n-seconds').attr('disabled','disabled');
         $('#expire-client-cache-after-n-seconds').attr('disabled','disabled');
 
@@ -924,6 +929,7 @@ var kbpublish = {
                 $('#llb-maxy').removeAttr('disabled');
                 $('#llb-crs').removeAttr('disabled');
                 $('#new-publish-create-cached-layer').removeAttr('disabled');
+                $('#new-publish-health-check-level').removeAttr('disabled');
                 $('#expire-server-cache-after-n-seconds').removeAttr('disabled');
                 $('#expire-client-cache-after-n-seconds').removeAttr('disabled');
             }
@@ -945,6 +951,7 @@ var kbpublish = {
         let expireServerCacheInSeconds = $('#expire-server-cache-after-n-seconds').val();
         let expireClientCacheInSeconds = $('#expire-client-cache-after-n-seconds').val();
         let gpkgMemoryMapSize = $('#new-publish-gpkg-memory-map-size').val();
+        let healthCheckLevel = $('#new-publish-health-check-level').val();
         let geotiffSrs = $('#new-publish-srs-geotiff').val().replace(/\s+/g, '');  // e.g. 'EPSG: 3577' -> 'EPSG:3577'
 
         // Validate data
@@ -997,6 +1004,7 @@ var kbpublish = {
             "expire_server_cache_after_n_seconds": expireServerCacheInSeconds,
             "expire_client_cache_after_n_seconds": expireClientCacheInSeconds,
             "gpkg_memory_map_size": gpkgMemoryMapSize === '' ? null : gpkgMemoryMapSize,
+            "health_check_level": healthCheckLevel,
             "srs": (newpublishstoretype === '2' && geotiffSrs) ? geotiffSrs.toUpperCase() : null  // GeoTiff only (class StoreType)
         };
 
@@ -1030,6 +1038,7 @@ var kbpublish = {
         $('#new-publish-store-type').attr('disabled','disabled');
         $('#new-publish-active').attr('disabled','disabled');
         $('#new-publish-create-cached-layer').attr('disabled','disabled');
+        $('#new-publish-health-check-level').attr('disabled','disabled');
         $('#expire-server-cache-after-n-seconds').attr('disabled','disabled');
         $('#expire-client-cache-after-n-seconds').attr('disabled','disabled');
         
@@ -1063,6 +1072,7 @@ var kbpublish = {
                 $('#new-publish-store-type').removeAttr('disabled');  
                 $('#new-publish-active').removeAttr('disabled');  
                 $('#new-publish-create-cached-layer').removeAttr('disabled');  
+                $('#new-publish-health-check-level').removeAttr('disabled');
                 $('#expire-server-cache-after-n-seconds').removeAttr('disabled');
                 $('#expire-client-cache-after-n-seconds').removeAttr('disabled');
             },
@@ -1711,6 +1721,7 @@ var kbpublish = {
                             }
                             html+= "</td>";
                             html+= "<td>" + yes_no_icon + "</td>";
+                            html+= "<td>" + geoserver_publish_channel.health_check_level_name + "</td>";
                             html+= "<td>";
                             if (geoserver_publish_channel.layer_groups && geoserver_publish_channel.layer_groups.length > 0) {
                                 html += geoserver_publish_channel.layer_groups.map(function(lg) {
@@ -1852,6 +1863,7 @@ var kbpublish = {
             $('#new-publish-create-cached-layer').removeAttr('disabled').prop('checked', this.toBoolean(geoserver_publish_channel_obj.create_cached_layer));  
             $('#expire-server-cache-after-n-seconds').removeAttr('disabled').val(geoserver_publish_channel_obj.expire_server_cache_after_n_seconds);
             $('#expire-client-cache-after-n-seconds').removeAttr('disabled').val(geoserver_publish_channel_obj.expire_client_cache_after_n_seconds);
+            $('#new-publish-health-check-level').removeAttr('disabled').val(geoserver_publish_channel_obj.health_check_level);
         } else {
             // Title and button
             $('#publish-geoserver-subscription-modal-title').text('Create New Geoserver Publish Entry');
@@ -1881,6 +1893,7 @@ var kbpublish = {
             $('#new-publish-create-cached-layer').removeAttr('disabled').prop('checked', true);
             $('#expire-server-cache-after-n-seconds').removeAttr('disabled').val(kbpublish.var.expire_server_cache_after_n_seconds_default);
             $('#expire-client-cache-after-n-seconds').removeAttr('disabled').val(kbpublish.var.expire_client_cache_after_n_seconds_default);
+            $('#new-publish-health-check-level').removeAttr('disabled').val(kbpublish.var.health_check_level_default);
         }
 
         // Remove success/error message
@@ -1910,6 +1923,7 @@ var kbpublish = {
             $('#new-publish-create-cached-layer').removeAttr('disabled').prop('checked', this.toBoolean(geoserver_publish_channel_obj.create_cached_layer));  
             $('#expire-server-cache-after-n-seconds').removeAttr('disabled').val(geoserver_publish_channel_obj.expire_server_cache_after_n_seconds);
             $('#expire-client-cache-after-n-seconds').removeAttr('disabled').val(geoserver_publish_channel_obj.expire_client_cache_after_n_seconds);
+            $('#new-publish-health-check-level').removeAttr('disabled').val(geoserver_publish_channel_obj.health_check_level);
             $('#new-publish-gpkg-memory-map-size').removeAttr('disabled').val(geoserver_publish_channel_obj.gpkg_memory_map_size);
             $('#new-publish-srs-geotiff').val(geoserver_publish_channel_obj.srs || '');
         } else { // Create new
@@ -1925,6 +1939,7 @@ var kbpublish = {
             $('#new-publish-create-cached-layer').removeAttr('disabled').prop('checked', true);
             $('#expire-server-cache-after-n-seconds').removeAttr('disabled').val(kbpublish.var.expire_server_cache_after_n_seconds_default);
             $('#expire-client-cache-after-n-seconds').removeAttr('disabled').val(kbpublish.var.expire_client_cache_after_n_seconds_default);
+            $('#new-publish-health-check-level').removeAttr('disabled').val(kbpublish.var.health_check_level_default);
             $('#new-publish-gpkg-memory-map-size').removeAttr('disabled').val('');
             $('#new-publish-srs-geotiff').val('');
         }
