@@ -787,3 +787,20 @@ def _save_layer_health_check(channel: GeoServerPublishChannel, layer_name: str, 
         }
     )
 
+
+def get_unhealthy_channels(levels: Optional[list[int]] = None) -> models.QuerySet:
+    """Returns the active channels with an enabled pool whose last health check failed.
+
+    Used by the Layer Health menu badge and the layer health API, so both count the same way.
+
+    Args:
+        levels (Optional[list[int]]): HealthCheckLevel values to include. None or empty includes all.
+    """
+    channels = GeoServerPublishChannel.objects.filter(
+        active=True,
+        geoserver_pool__enabled=True,
+        health_checks__health_status=GeoServerLayerHealthcheck.UNHEALTHY,
+    )
+    if levels:
+        channels = channels.filter(health_check_level__in=levels)
+    return channels.distinct()
