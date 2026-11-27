@@ -3,6 +3,12 @@
 {% if request.user.is_authenticated is True %}
     <input type="hidden" id="csrfmiddlewaretoken" name="csrfmiddlewaretoken" value="{{ csrf_token }}">
     <div class="container" id="dashboard-table-container">
+        {# Unhealthy layers per level: red if any, grey if none (not green, which means Healthy in the status filter) #}
+        <div class="mb-3" id="layer-health-level-counts">
+            {% for badge in layer_health_level_badges %}
+            <button type="button" class="badge rounded-pill border-0 me-1 layer-health-level-count {% if badge.count %}bg-danger{% else %}bg-secondary{% endif %}" data-level="{{ badge.level }}" title="Show unhealthy {{ badge.label }} layers">{{ badge.label }} {{ badge.count }}</button>
+            {% endfor %}
+        </div>
         <div class="card" >
             <div class="card-header fw-bold h4" style="padding:30px;">
                 <div class="row">
@@ -163,6 +169,17 @@
             }
             function setupEventHandlers() {
                 $('.health-check-level-checkbox, .health-status-checkbox').on('change', function(){
+                    $('#geoServerGroupTable').DataTable().ajax.reload();
+                });
+                // A level badge above the page: tick only that level and only Unhealthy, then reload
+                $('.layer-health-level-count').on('click', function(){
+                    let level = String($(this).data('level'));
+                    $('.health-check-level-checkbox').each(function(){
+                        $(this).prop('checked', this.value === level);
+                    });
+                    $('.health-status-checkbox').each(function(){
+                        $(this).prop('checked', this.value === '{{ health_status_unhealthy }}');
+                    });
                     $('#geoServerGroupTable').DataTable().ajax.reload();
                 });
             }

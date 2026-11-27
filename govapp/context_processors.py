@@ -49,7 +49,8 @@ def variables(request: http.HttpRequest) -> dict[str, Any]:
             is_able_to_view_logs = user_can_view_logs(request.user)
             cache.set('is_able_to_view_logs' + str(request.session.session_key), is_catalogue_admin, 3600)
     
-    # Layer Health menu badges (one per level), only for the users who see the menu item
+    # Layer Health: the total for the menu badge and the count per level for the health check page,
+    # only for the users who see the menu item
     layer_health_unhealthy_count = 0
     layer_health_badge_title = ''
     layer_health_level_badges = []
@@ -64,11 +65,13 @@ def variables(request: http.HttpRequest) -> dict[str, Any]:
             layer_text = 'layer' if layer_health_unhealthy_count == 1 else 'layers'
             # e.g. "29 unhealthy layers: Critical 1, Business Hours 0, Non Critical 28"
             layer_health_badge_title = f'{layer_health_unhealthy_count} unhealthy {layer_text}: {per_level}'
-            # One small badge per level, e.g. "C 1", "B 0", "N 28" (first letter of the level name)
-            layer_health_level_badges = [
-                {'letter': level.label[0], 'count': level_counts.get(level.value, 0)}
-                for level in HealthCheckLevel
-            ]
+        else:
+            layer_health_badge_title = 'No unhealthy layers'
+        # e.g. Critical 1, Business Hours 0, Non Critical 28
+        layer_health_level_badges = [
+            {'level': level.value, 'label': level.label, 'count': level_counts.get(level.value, 0)}
+            for level in HealthCheckLevel
+        ]
 
     return {
         "template_group": "kaartdijinboodja",
@@ -82,6 +85,7 @@ def variables(request: http.HttpRequest) -> dict[str, Any]:
         'is_catalogue_admin': is_catalogue_admin,
         'MANAGEMENT_COMMANDS_PAGE_ENABLED': conf.settings.MANAGEMENT_COMMANDS_PAGE_ENABLED,
         'is_able_to_view_logs': is_able_to_view_logs,
+        'layer_health_unhealthy_count': layer_health_unhealthy_count,
         'layer_health_badge_title': layer_health_badge_title,
         'layer_health_level_badges': layer_health_level_badges,
     }
