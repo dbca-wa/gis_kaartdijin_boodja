@@ -722,6 +722,8 @@ class GeoServerLayerHealthcheckView(base.TemplateView):
         # Choices for the level and status filters on the page. Unknown is only the default
         # value of the field: the health check always saves Healthy or Unhealthy.
         context['health_check_levels'] = HealthCheckLevel.choices
+        # Status ticked when a level badge above the page is clicked
+        context['health_status_unhealthy'] = GeoServerLayerHealthcheck.UNHEALTHY
         # (value, label, ticked at first, badge class as in the Health Status column):
         # show only the unhealthy layers at first
         context['health_statuses'] = [
