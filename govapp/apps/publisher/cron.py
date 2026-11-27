@@ -30,7 +30,8 @@ class PublishGeoServerQueueCronJob(django_cron.CronJobBase):
 
 class GeoServerLayerHealthcheckCriticalCronJob(django_cron.CronJobBase):
     schedule = django_cron.Schedule(run_every_mins=conf.settings.GEOSERVER_LAYER_HEALTH_CHECK_CRITICAL_PERIOD_MINS)
-    code = 'geoserver.publisher.geoserver_layer_health_check_critical_cron_job'
+    # django-cron stores the code in a 64-character column, so a code must not be longer than 64 characters
+    code = 'geoserver.publisher.layer_health_check_critical'
 
     def do(self):
         log.info("Geoserver layer healthcheck (critical) cron job triggered, running...")
@@ -41,7 +42,7 @@ class GeoServerLayerHealthcheckCriticalCronJob(django_cron.CronJobBase):
 
 class GeoServerLayerHealthcheckBusinessHoursCronJob(django_cron.CronJobBase):
     schedule = django_cron.Schedule(run_every_mins=conf.settings.GEOSERVER_LAYER_HEALTH_CHECK_BUSINESS_HOURS_PERIOD_MINS)
-    code = 'geoserver.publisher.geoserver_layer_health_check_business_hours_cron_job'
+    code = 'geoserver.publisher.layer_health_check_business_hours'
 
     def do(self):
         log.info("Geoserver layer healthcheck (business hours) cron job triggered, running...")
@@ -52,7 +53,7 @@ class GeoServerLayerHealthcheckBusinessHoursCronJob(django_cron.CronJobBase):
 
 class GeoServerLayerHealthcheckNonCriticalCronJob(django_cron.CronJobBase):
     schedule = django_cron.Schedule(run_at_times=conf.settings.GEOSERVER_LAYER_HEALTH_CHECK_NON_CRITICAL_TIMES)
-    code = 'geoserver.publisher.geoserver_layer_health_check_non_critical_cron_job'
+    code = 'geoserver.publisher.layer_health_check_non_critical'
 
     def do(self):
         log.info("Geoserver layer healthcheck (non critical) cron job triggered, running...")
